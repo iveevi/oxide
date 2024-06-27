@@ -1,3 +1,6 @@
+#pragma once
+
+#include <string>
 #include <concepts>
 
 // Classification of domain sets
@@ -27,6 +30,8 @@ struct Real {
 	Real(value_type v = value_type()) : value(v) {}
 	operator value_type() { return value; }
 };
+
+using Symbol = std::string;
 
 // Collecting all types under a concept
 template <typename T>

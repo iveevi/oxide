@@ -5,7 +5,9 @@ set(CMAKE_CXX_STANDARD 20)
 project(oxide CXX)
 
 add_executable(oxide
-	source/main.cpp)
+	source/main.cpp
+	source/lex.cpp
+	source/format.cpp)
 
 include_directories(.)
 
