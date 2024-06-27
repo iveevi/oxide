@@ -4,7 +4,10 @@ set(CMAKE_CXX_STANDARD 20)
 
 project(oxide CXX)
 
-add_executable(oxide main.cpp)
+add_executable(oxide
+	source/main.cpp)
+
+include_directories(.)
 
 target_compile_options(oxide PRIVATE -fconcepts-diagnostics-depth=2)
 
