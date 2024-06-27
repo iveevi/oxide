@@ -18,7 +18,7 @@ struct _rpe_vector_dispatcher {
 	template <typename T>
 	requires std::is_constructible_v <Atom, T>
 	void operator()(const T &t) {
-		finish.push_back(RPE(t));
+		finish.push_back(t);
 	}
 
 	void operator()(const Operation &op) {
@@ -28,7 +28,7 @@ struct _rpe_vector_dispatcher {
 				break;
 
 			operators.pop();
-			finish.push_back(RPE(top));
+			finish.push_back(top);
 
 			fmt::println("popped operation: {}", (int) top);
 		}
@@ -42,6 +42,7 @@ struct _rpe_vector_dispatcher {
 	}
 };
 
+// TODO: supply the domain specification for function lookups
 std::vector <RPE> rpe_vector(const std::vector <token> &lexed)
 {
 	// Shunting Yards
@@ -66,6 +67,75 @@ std::vector <RPE> rpe_vector(const std::vector <token> &lexed)
 	return finish;
 }
 
+struct _rpe_to_etn_dispatcher {
+	std::stack <ETN> &operands;
+
+	// template <typename T>
+	// requires std::is_constructible_v <Atom, T>
+	// void operator()(const T &t) {
+	// }
+
+	// void operator()(const Operation &op) {
+	// }
+
+	template <typename T>
+	void operator()(const T &t) {
+		fmt::println("unexpected token encountered: {}", t);
+	}
+};
+
+// TODO: custom allocator for more coherent trees
+ETN_ref rpes_to_etn(const std::vector <RPE> &rpes)
+{
+	std::stack <ETN> operands;
+
+	std::deque <RPE> queued {
+		rpes.begin(),
+		rpes.end()
+	};
+
+	_rpe_to_etn_dispatcher red(operands);
+	while (queued.size()) {
+		auto r = queued.front();
+		queued.pop_front();
+
+		fmt::println("operand stack: {}", operands.size());
+
+		if (r.has_atom()) {
+			operands.push(r.atom());
+
+			fmt::println("constructed ETN (atom) for: {}", r.atom());
+		} else {
+			if (operands.size() < 2) {
+				fmt::println("expected at least two operands for operation: {}", token(r.op()));
+				return nullptr;
+			}
+
+			// Assume binary for now
+			ETN_ref lhs = new ETN(operands.top());
+			operands.pop();
+
+			ETN *rhs = new ETN(operands.top());
+			operands.pop();
+
+			lhs->next() = rhs;
+
+			ETN opt = expr_tree_op {
+				.op = r.op(),
+				.down = lhs,
+				.next = nullptr
+			};
+
+			operands.push(opt);
+
+			fmt::println("constructed ETN (tree) for operation: {}", token(r.op()));
+		}
+	}
+
+	auto root = operands.top();
+	return new ETN(root);
+}
+
 int main()
 {
 	Scalar <Integer> scalar;
@@ -79,4 +149,6 @@ int main()
 	fmt::println("rpe vector:");
 	for (auto rpe : rpes)
 		fmt::println("  {}", rpe);
+
+	rpes_to_etn(rpes);
 }
