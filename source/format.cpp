@@ -25,6 +25,14 @@ struct _fmt_token_dispatcher {
 		ref += op_strs[op];
 	}
 
+	void operator()(Equals) {
+		ref += '=';
+	}
+
+	void operator()(Comma) {
+		ref += ',';
+	}
+
 	template <typename T>
 	void operator()(T x) {
 		ref += "?";
@@ -34,6 +42,14 @@ struct _fmt_token_dispatcher {
 		"none", "+", "-", "*", "/"
 	};
 };
+
+std::string format_as(const Atom &atom)
+{
+	std::string result;
+	_fmt_token_dispatcher ftd(result);
+	std::visit(ftd, atom);
+	return result;
+}
 
 std::string format_as(const RPE &rpe)
 {
@@ -48,14 +64,14 @@ std::string format_as(const RPE &rpe)
 	return result;
 }
 
-std::string format_as(const token &t)
+std::string format_as(const Token &t)
 {
 	std::string result;
 	std::visit(_fmt_token_dispatcher(result), t);
 	return result;
 }
 
-std::string format_as(const std::vector <token> &tokens)
+std::string format_as(const std::vector <Token> &tokens)
 {
 	std::string result;
 
@@ -67,4 +83,37 @@ std::string format_as(const std::vector <token> &tokens)
 	}
 
 	return "[" + result + "]";
+}
+
+std::string format_as(const ETN &etn, int indent)
+{
+	std::string result;
+
+	if (indent > 0) {
+		result += std::string((indent - 1) << 2, ' ');
+		result += " └──";
+	}
+
+	_fmt_token_dispatcher ftd(result);
+	if (etn.has_atom()) {
+		auto atom = std::get <0> (etn).atom;
+
+		result += "[";
+			std::visit(ftd, atom);
+		result += "]";
+	} else {
+		auto tree = std::get <1> (etn);
+
+		result += "[";
+			ftd(tree.op);
+		result += "]";
+
+		ETN *d = tree.down;
+		while (d) {
+			result += "\n" + format_as(*d, indent + 1);
+			d = d->next();
+		}
+	}
+
+	return result;
 }

@@ -2,10 +2,19 @@
 
 #include <variant>
 #include <optional>
+#include <vector>
 
 #include "include/types.hpp"
 #include "include/formalism.hpp"
 
-using token = std::variant <Integer, Real, Symbol, Operation>;
+// Special tokens
+struct Equals {};
+struct Comma {};
 
-std::optional <std::vector <token>> lex(const std::string &);
+using Token = std::variant <
+	Integer, Real, Symbol,
+	Operation,
+	Equals, Comma
+>;
+
+std::vector <Token> lex(const std::string &);

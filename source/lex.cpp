@@ -129,11 +129,28 @@ ParseResult <Symbol> lex_symbol(const std::string &s, size_t pos)
 	return ParseResult <Symbol> ::ok(result, pos);
 }
 
+ParseResult <Token> lex_special(const std::string &s, size_t pos)
+{
+	// Special single characters
+	char c = s[pos++];
+
+	switch (c) {
+	case '=':
+		return ParseResult <Token> ::ok(Equals(), pos);
+	case ',':
+		return ParseResult <Token> ::ok(Comma(), pos);
+	default:
+		break;
+	}
+
+	return ParseResult <Token> ::fail();
+}
+
 // TODO: plus special tokens, e.g. parenthesis, equals, etc
 // TODO: infer multiplication from consecutive symbols in shunting yards
-std::optional <std::vector <token>> lex(const std::string &s)
+std::vector <Token> lex(const std::string &s)
 {
-	std::vector <token> result;
+	std::vector <Token> result;
 
 	size_t pos = 0;
 	while (pos < s.length()) {
@@ -162,9 +179,12 @@ std::optional <std::vector <token>> lex(const std::string &s)
 		} else if (auto op_result = lex_operation(s, pos)) {
 			result.push_back(op_result.value);
 			pos = op_result.next;
+		} else if (auto special_result = lex_special(s, pos)) {
+			result.push_back(special_result.value);
+			pos = special_result.next;
 		} else {
 			fprintf(stderr, "encountered unexpected character '%c'\n", c);
-			return std::nullopt;
+			break;
 		}
 	}
 

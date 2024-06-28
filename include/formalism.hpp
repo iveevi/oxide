@@ -1,7 +1,7 @@
 #pragma once
 
+#include <optional>
 #include <variant>
-#include <vector>
 
 #include "include/types.hpp"
 
@@ -27,20 +27,20 @@ using Atom = std::variant <Integer, Real, Symbol>;
 struct RPE : std::variant <Atom, Operation> {
 	using std::variant <Atom, Operation> ::variant;
 
-	Atom atom() {
-		return std::get <0> (*this);
-	}
-
-	Operation op() {
-		return std::get <1> (*this);
-	}
-
 	bool has_atom() const {
 		return std::holds_alternative <Atom> (*this);
 	}
 
 	bool has_op() const {
 		return std::holds_alternative <Operation> (*this);
+	}
+
+	Atom atom() {
+		return std::get <0> (*this);
+	}
+
+	Operation op() {
+		return std::get <1> (*this);
 	}
 };
 
@@ -65,6 +65,14 @@ struct expr_tree_op {
 struct ETN : std::variant <expr_tree_atom, expr_tree_op> {
 	using std::variant <expr_tree_atom, expr_tree_op> ::variant;
 
+	bool has_atom() const {
+		return std::holds_alternative <expr_tree_atom> (*this);
+	}
+
+	bool has_op() const {
+		return std::holds_alternative <expr_tree_op> (*this);
+	}
+
 	ETN_ref &next() {
 		if (std::holds_alternative <expr_tree_atom> (*this))
 			return std::get <0> (*this).next;
@@ -74,15 +82,18 @@ struct ETN : std::variant <expr_tree_atom, expr_tree_op> {
 };
 
 struct Expression {
-	// Reverse Polish representation
-	std::vector <RPE> rpe;
-
 	// Expression tree, linearized (root @0)
 	ETN *etn;
+
+	// TODO: domain signature
+
+	static std::optional <Expression> from(const std::string &);
 };
 
 struct Statement {
 	Expression lhs;
 	Expression rhs;
 	Comparator cmp;
+
+	static std::optional <Statement> from(const std::string &);
 };
