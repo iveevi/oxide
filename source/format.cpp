@@ -1,10 +1,26 @@
+#include <variant>
+
 #include <fmt/printf.h>
 #include <fmt/std.h>
 #include <fmt/format.h>
 #include <fmt/core.h>
-#include <variant>
 
 #include "include/format.hpp"
+#include "include/formalism.hpp"
+
+std::string format_as(const Domain &dom)
+{
+	switch (dom) {
+	case integer:
+		return "Z";
+	case real:
+		return "R";
+	default:
+		break;
+	}
+
+	return "?";
+}
 
 struct _fmt_token_dispatcher {
 	std::string &ref;
@@ -48,19 +64,6 @@ std::string format_as(const Atom &atom)
 	std::string result;
 	_fmt_token_dispatcher ftd(result);
 	std::visit(ftd, atom);
-	return result;
-}
-
-std::string format_as(const RPE &rpe)
-{
-	std::string result;
-
-	_fmt_token_dispatcher ftd(result);
-	if (std::holds_alternative <Atom> (rpe))
-		std::visit(ftd, std::get <0> (rpe));
-	else
-		ftd(std::get <1> (rpe));
-
 	return result;
 }
 
@@ -116,4 +119,57 @@ std::string format_as(const ETN &etn, int indent)
 	}
 
 	return result;
+}
+
+std::string format_as(const Signature &sig)
+{
+	std::string result;
+
+	for (auto it = sig.begin(); it != sig.end(); it++) {
+		result += it->first + ": " + format_as(it->second);
+		if (std::next(it) != sig.end())
+			result += ", ";
+	}
+
+	return "[" + result + "]";
+}
+
+std::string _etn_to_string(const ETN *etn)
+{
+	std::string result;
+
+	_fmt_token_dispatcher ftd(result);
+	if (etn->has_atom()) {
+		auto atom = std::get <0> (*etn).atom;
+		std::visit(ftd, atom);
+	} else {
+		auto tree = std::get <1> (*etn);
+
+		// TODO: check if binary
+		result += "(";
+
+		ETN *a = tree.down;
+		ETN *b = a->next();
+
+		result += _etn_to_string(a) + " ";
+		ftd(tree.op);
+		result += " " + _etn_to_string(b);
+
+		result += ")";
+	}
+
+	return result;
+}
+
+std::string format_as(const Expression &expr)
+{
+	return _etn_to_string(expr.etn) + " " + format_as(expr.signature);
+}
+
+std::string format_as(const Statement &stmt)
+{
+	// TODO: assuming eq
+	return _etn_to_string(stmt.lhs.etn)
+		+ " = " + _etn_to_string(stmt.rhs.etn)
+		+ " " + format_as(stmt.signature);
 }

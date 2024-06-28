@@ -7,7 +7,9 @@ project(oxide CXX)
 add_executable(oxide
 	source/main.cpp
 	source/lex.cpp
-	source/format.cpp)
+	source/format.cpp
+	source/parse.cpp
+	source/formalism.cpp)
 
 include_directories(.)
 

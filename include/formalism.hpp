@@ -2,6 +2,8 @@
 
 #include <optional>
 #include <variant>
+#include <vector>
+#include <unordered_map>
 
 #include "include/types.hpp"
 
@@ -18,31 +20,25 @@ enum Comparator {
 	le, leq
 };
 
-struct Expression;
-struct Statement;
+// A domain signature indicates the types of each *symbol*
+using Signature = std::unordered_map <Symbol, Domain>;
 
+std::optional <Signature> join(const Signature &, const Signature &);
+
+template <typename E>
+Signature default_signature(E e)
+{
+	Signature result;
+
+	auto symbols = e.symbols();
+	for (const auto &s : symbols)
+		result[s] = real;
+
+	return result;
+}
+
+// Leaf element in an expression tree
 using Atom = std::variant <Integer, Real, Symbol>;
-
-// Element in a reverse polish stack
-struct RPE : std::variant <Atom, Operation> {
-	using std::variant <Atom, Operation> ::variant;
-
-	bool has_atom() const {
-		return std::holds_alternative <Atom> (*this);
-	}
-
-	bool has_op() const {
-		return std::holds_alternative <Operation> (*this);
-	}
-
-	Atom atom() {
-		return std::get <0> (*this);
-	}
-
-	Operation op() {
-		return std::get <1> (*this);
-	}
-};
 
 // Node in an expression tree
 struct ETN;
@@ -58,6 +54,7 @@ struct expr_tree_atom {
 
 struct expr_tree_op {
 	Operation op;
+	Domain dom;
 	ETN_ref down;
 	ETN_ref next; // For next operand
 };
@@ -65,27 +62,20 @@ struct expr_tree_op {
 struct ETN : std::variant <expr_tree_atom, expr_tree_op> {
 	using std::variant <expr_tree_atom, expr_tree_op> ::variant;
 
-	bool has_atom() const {
-		return std::holds_alternative <expr_tree_atom> (*this);
-	}
+	bool has_atom() const;
+	bool has_op() const;
 
-	bool has_op() const {
-		return std::holds_alternative <expr_tree_op> (*this);
-	}
+	std::vector <Symbol> symbols() const;
 
-	ETN_ref &next() {
-		if (std::holds_alternative <expr_tree_atom> (*this))
-			return std::get <0> (*this).next;
-
-		return std::get <1> (*this).next;
-	}
+	ETN_ref &next();
 };
 
 struct Expression {
 	// Expression tree, linearized (root @0)
 	ETN *etn;
+	Signature signature;
 
-	// TODO: domain signature
+	std::vector <Symbol> symbols() const;
 
 	static std::optional <Expression> from(const std::string &);
 };
@@ -94,6 +84,9 @@ struct Statement {
 	Expression lhs;
 	Expression rhs;
 	Comparator cmp;
+	Signature signature;
+
+	std::vector <Symbol> symbols() const;
 
 	static std::optional <Statement> from(const std::string &);
 };
