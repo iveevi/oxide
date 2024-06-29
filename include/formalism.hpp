@@ -23,6 +23,7 @@ enum Comparator {
 // A domain signature indicates the types of each *symbol*
 using Signature = std::unordered_map <Symbol, Domain>;
 
+bool add_signature(Signature &, const std::string &, Domain);
 std::optional <Signature> join(const Signature &, const Signature &);
 
 template <typename E>
@@ -33,6 +34,20 @@ Signature default_signature(E e)
 	auto symbols = e.symbols();
 	for (const auto &s : symbols)
 		result[s] = real;
+
+	return result;
+}
+
+template <typename E>
+Signature default_signature(const Signature &S, E e)
+{
+	Signature result = S;
+
+	auto symbols = e.symbols();
+	for (const auto &s : symbols) {
+		if (!S.count(s))
+			result[s] = real;
+	}
 
 	return result;
 }

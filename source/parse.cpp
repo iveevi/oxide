@@ -47,15 +47,21 @@ struct _rpe_vector_dispatcher {
 			operators.pop();
 			finish.push_back(top);
 
-			fmt::println("popped operation: {}", (int) top);
+			// fmt::println("popped operation: {}", (int) top);
 		}
 
 		operators.push(op);
 	}
 
-	// TODO: if equals, then clear tokens and proceed to final stage...
+	// End parsing expressions when encountering:
+	// - equals (-> statement)
+	// - [      (-> signature)
 	void operator()(const Equals &) {
 		// Stop parsing, but leave output queue and operators intact
+		tokens.clear();
+	}
+
+	void operator()(const SignatureBegin &) {
 		tokens.clear();
 	}
 
@@ -102,6 +108,95 @@ RPE_vector rpe_vector(const std::vector <Token> &lexed, size_t pos = 0)
 	return finish;
 }
 
+std::optional <std::pair <Signature, size_t>> signature_from_tokens(const std::vector <Token> &tokens, size_t pos = 0)
+{
+	Signature result;
+
+	auto safe_get = [&](bool inc = true) -> std::optional <Token> {
+		if (pos >= tokens.size())
+			return std::nullopt;
+
+		size_t p = pos;
+		pos += inc;
+		return tokens[p];
+	};
+
+	auto first = safe_get();
+	if (!first || !first->is <SignatureBegin> ()) {
+		return std::nullopt;
+	}
+
+	// TODO: easier error handling... (<clause>, <expected message>, <expected>)
+	while (true) {
+		// <symbol> <in> <symbol: domain> <comma> ...
+		auto symbol = safe_get();
+		if (!symbol || !symbol->is <Symbol> ()) {
+			if (symbol)
+				fmt::println("unexpected '{}' in signature, expected a symbol", symbol.value());
+			else
+				fmt::println("expected a symbol in signature");
+			return std::nullopt;
+		}
+
+		auto in = safe_get();
+		if (!in || !in->is <In> ()) {
+			if (in)
+				fmt::println("unexpected '{}' in signature, expected ':'", in.value());
+			else
+				fmt::println("expected ':' in signature");
+			return std::nullopt;
+		}
+
+		auto domain = safe_get();
+		if (!domain || !domain->is <Symbol> ()) {
+			if (in)
+				fmt::println("unexpected '{}' in signature, expected a domain symbol", domain.value());
+			else
+				fmt::println("expected a domain symbol in signature");
+			return std::nullopt;
+		}
+
+		std::string str = symbol->as <Symbol> ();
+		std::string dstr = domain->as <Symbol> ();
+
+		Domain dom;
+		if (dstr == "R") {
+			dom = real;
+		} else if (dstr == "Z") {
+			dom = integer;
+		} else {
+			fmt::println("invalid domain symbol '{}'", dstr);
+			return std::nullopt;
+		}
+
+		if (!add_signature(result, str, dom)) {
+			return std::nullopt;
+		}
+
+		auto comma = safe_get(false);
+		if (!comma) {
+			fmt::println("expected ']' to close the signature");
+			return std::nullopt;
+		}
+
+		if (!comma->is <Comma> ())
+			break;
+
+		pos++;
+	}
+
+	auto end = safe_get();
+	if (!end || !end->is <SignatureEnd> ()) {
+		if (end)
+			fmt::println("unexpected '{}' in signature, expected ']' to close", end.value());
+		else
+			fmt::println("expected ']' to close the signature");
+		return std::nullopt;
+	}
+
+	return std::make_pair(result, pos);
+}
+
 // TODO: custom allocator for more coherent trees
 ETN_ref rpes_to_etn(const std::vector <RPE> &rpes)
 {
@@ -116,12 +211,12 @@ ETN_ref rpes_to_etn(const std::vector <RPE> &rpes)
 		auto r = queued.front();
 		queued.pop_front();
 
-		fmt::println("operand stack: {}", operands.size());
+		// fmt::println("operand stack: {}", operands.size());
 
 		if (r.has_atom()) {
 			operands.push(r.atom());
 
-			fmt::println("constructed ETN (atom) for: {}", r.atom());
+			// fmt::println("constructed ETN (atom) for: {}", r.atom());
 		} else {
 			if (operands.size() < 2) {
 				fmt::println("expected at least two operands for operation: {}", Token(r.op()));
@@ -145,7 +240,7 @@ ETN_ref rpes_to_etn(const std::vector <RPE> &rpes)
 
 			operands.push(opt);
 
-			fmt::println("constructed ETN (tree) for operation: {}", Token(r.op()));
+			// fmt::println("constructed ETN (tree) for operation: {}", Token(r.op()));
 		}
 	}
 
@@ -163,7 +258,12 @@ std::optional <Expression> Expression::from(const std::string &s)
 		return std::nullopt;
 	}
 
-	if (rpev.empty() || rpev.size() != tokens.size()) {
+	const auto fallback_signature = std::make_pair(Signature(), rpev.size());
+
+	auto [sig, pos] = signature_from_tokens(tokens, rpev.size())
+		.value_or(fallback_signature);
+
+	if (rpev.empty() || pos != tokens.size()) {
 		fmt::println("failed to fully parse expression");
 		return std::nullopt;
 	}
@@ -176,7 +276,7 @@ std::optional <Expression> Expression::from(const std::string &s)
 
 	return Expression {
 		.etn = etn,
-		.signature = default_signature(*etn)
+		.signature = default_signature(sig, *etn)
 	};
 }
 
@@ -204,6 +304,17 @@ std::optional <Statement> Statement::from(const std::string &s)
 		return std::nullopt;
 	}
 
+	// Optionally a domain signature at the end
+	const auto fallback_signature = std::make_pair(Signature(), offset + rhs_rpev.size());
+
+	auto [sig, pos] = signature_from_tokens(tokens, fallback_signature.second)
+		.value_or(fallback_signature);
+
+	if (pos != tokens.size()) {
+		fmt::println("failed to fully parse statement");
+		return std::nullopt;
+	}
+
 	ETN_ref lhs = rpes_to_etn(lhs_rpev);
 	if (!lhs) {
 		fmt::println("error in constructing ETN (lhs)");
@@ -217,8 +328,8 @@ std::optional <Statement> Statement::from(const std::string &s)
 	}
 
 	// TODO: safe join
-	auto sl = default_signature(*lhs);
-	auto sr = default_signature(*rhs);
+	auto sl = default_signature(sig, *lhs);
+	auto sr = default_signature(sig, *rhs);
 
 	return Statement {
 		.lhs = Expression { lhs, sl },

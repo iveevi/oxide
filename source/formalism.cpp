@@ -4,16 +4,23 @@
 #include "include/formalism.hpp"
 
 // Signature
+bool add_signature(Signature &S, const std::string &sym, Domain dom)
+{
+	if (S.count(sym) && S[sym] != dom) {
+		fmt::println("conflicting domain signature for symbol '{}' between {} and {}", sym, S[sym], dom);
+		return false;
+	}
+
+	S[sym] = dom;
+	return true;
+}
+
 std::optional <Signature> join(const Signature &A, const Signature &B)
 {
 	Signature result = A;
 	for (const auto &[s, dom] : B) {
-		if (result.count(s) && result[s] != dom) {
-			fmt::println("conflicting domain signature for symbol '{}' between {} and {}", s, result[s], dom);
+		if (!add_signature(result, s, dom))
 			return std::nullopt;
-		}
-
-		result[s] = dom;
 	}
 
 	return result;

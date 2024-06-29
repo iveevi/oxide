@@ -139,6 +139,12 @@ ParseResult <Token> lex_special(const std::string &s, size_t pos)
 		return ParseResult <Token> ::ok(Equals(), pos);
 	case ',':
 		return ParseResult <Token> ::ok(Comma(), pos);
+	case ':':
+		return ParseResult <Token> ::ok(In(), pos);
+	case '[':
+		return ParseResult <Token> ::ok(SignatureBegin(), pos);
+	case ']':
+		return ParseResult <Token> ::ok(SignatureEnd(), pos);
 	default:
 		break;
 	}

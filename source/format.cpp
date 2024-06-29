@@ -7,6 +7,7 @@
 
 #include "include/format.hpp"
 #include "include/formalism.hpp"
+#include "include/lex.hpp"
 
 std::string format_as(const Domain &dom)
 {
@@ -47,6 +48,18 @@ struct _fmt_token_dispatcher {
 
 	void operator()(Comma) {
 		ref += ',';
+	}
+
+	void operator()(In) {
+		ref += "in";
+	}
+
+	void operator()(SignatureBegin) {
+		ref += "<sig-begin>";
+	}
+
+	void operator()(SignatureEnd) {
+		ref += "<sig-end>";
 	}
 
 	template <typename T>
@@ -126,7 +139,7 @@ std::string format_as(const Signature &sig)
 	std::string result;
 
 	for (auto it = sig.begin(); it != sig.end(); it++) {
-		result += it->first + ": " + format_as(it->second);
+		result += it->first + " ∈ " + format_as(it->second);
 		if (std::next(it) != sig.end())
 			result += ", ";
 	}
