@@ -1,7 +1,10 @@
 #include "include/match.hpp"
 #include "include/formalism.hpp"
 #include "include/format.hpp"
+#include "include/memory.hpp"
+#include "include/types.hpp"
 
+// Comparators
 bool operator==(const Integer &A, const Integer &B)
 {
 	return A.value == B.value;
@@ -80,6 +83,7 @@ bool equal(const Expression &A, const Expression &B)
 	return equal(A.etn, B.etn);
 }
 
+// Finding matches
 std::optional <Substitution> add_substitution(const Substitution &S, const Symbol &sym, const Expression &expr)
 {
 	Substitution result = S;
@@ -89,7 +93,6 @@ std::optional <Substitution> add_substitution(const Substitution &S, const Symbo
 		return std::nullopt;
 	}
 
-	// TODO: clone...
 	result[sym] = expr;
 
 	return result;
@@ -111,9 +114,6 @@ std::optional <Substitution> join(const Substitution &A, const Substitution &B)
 
 std::optional <Substitution> match(const ETN_ref &source, const ETN_ref &victim)
 {
-	fmt::println("checking between A:\n{}", *source);
-	fmt::println("and B:\n{}", *victim);
-
 	if (source->is <_expr_tree_op> ()) {
 		if (!victim->is <_expr_tree_op> ())
 			return std::nullopt;
@@ -127,8 +127,6 @@ std::optional <Substitution> match(const ETN_ref &source, const ETN_ref &victim)
 		if (op_source != op_victim) {
 			return std::nullopt;
 		} else {
-			fmt::println("matching operations, proceeding onwards...");
-
 			Substitution sub;
 
 			ETN_ref source_head = tree_source.down;
@@ -159,13 +157,11 @@ std::optional <Substitution> match(const ETN_ref &source, const ETN_ref &victim)
 		auto atom_source = source->as <_expr_tree_atom> ().atom;
 
 		if (atom_source.is <Symbol> ()) {
-			fmt::println("FREE SYMBOL");
 			Symbol s = atom_source.as <Symbol> ();
-			fmt::println("assigning\n{}\nto free symbol {}", *victim, s);
 
 			// TODO: clone
 			Expression matched {
-				victim,
+				clone(victim),
 				default_signature(*victim)
 			};
 
@@ -179,4 +175,56 @@ std::optional <Substitution> match(const ETN_ref &source, const ETN_ref &victim)
 std::optional <Substitution> match(const Expression &source, const Expression &victim)
 {
 	return match(source.etn, victim.etn);
+}
+
+// Substitution methods
+ETN_ref Substitution::apply(const ETN_ref &etn)
+{
+	if (etn->is <_expr_tree_op> ()) {
+		auto tree = etn->as <_expr_tree_op> ();
+
+		ETN_ref netn = new ETN(tree);
+
+		ETN_ref head = tree.down;
+
+		std::queue <ETN_ref> list;
+		while (head) {
+			list.push(apply(head));
+			head = head->next();
+		}
+
+		ETN_ref nhead = list.front();
+		list.pop();
+
+		ETN_ref p = nhead;
+		while (list.size()) {
+			ETN_ref q = list.front();
+			list.pop();
+
+			p->next() = q;
+			p = q;
+		}
+
+		netn->as <_expr_tree_op> ().down = nhead;
+
+		return netn;
+	} else {
+		auto atom = etn->as <_expr_tree_atom> ().atom;
+		if (atom.is <Symbol> ()) {
+			Symbol sym = atom.as <Symbol> ();
+			if (contains(sym))
+				return clone(this->operator[](sym).etn);
+		}
+
+		return clone(etn);
+	}
+}
+
+Expression Substitution::apply(const Expression &expr)
+{
+	ETN_ref setn = apply(expr.etn);
+	return Expression {
+		.etn = setn,
+		.signature = default_signature(*setn)
+	};
 }

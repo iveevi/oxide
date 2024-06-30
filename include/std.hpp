@@ -12,7 +12,12 @@ struct auto_variant : std::variant <Args...> {
 	}
 
 	template <typename T>
-	T as() const {
+	T &as() {
+		return std::get <T> (*this);
+	}
+
+	template <typename T>
+	const T &as() const {
 		return std::get <T> (*this);
 	}
 };
