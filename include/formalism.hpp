@@ -5,9 +5,11 @@
 #include <vector>
 #include <unordered_map>
 
+#include "include/std.hpp"
 #include "include/types.hpp"
 
 // Formal arguments
+// TODO:: Operation to be a variant of function and binary op
 enum Operation {
 	none,
 	add, subtract,
@@ -27,7 +29,7 @@ bool add_signature(Signature &, const std::string &, Domain);
 std::optional <Signature> join(const Signature &, const Signature &);
 
 template <typename E>
-Signature default_signature(E e)
+Signature default_signature(const E &e)
 {
 	Signature result;
 
@@ -39,7 +41,7 @@ Signature default_signature(E e)
 }
 
 template <typename E>
-Signature default_signature(const Signature &S, E e)
+Signature default_signature(const Signature &S, const E &e)
 {
 	Signature result = S;
 
@@ -53,32 +55,41 @@ Signature default_signature(const Signature &S, E e)
 }
 
 // Leaf element in an expression tree
-using Atom = std::variant <Integer, Real, Symbol>;
+using Atom = auto_variant <Integer, Real, Symbol>;
 
 // Node in an expression tree
 struct ETN;
 
 using ETN_ref = ETN *;
 
-struct expr_tree_atom {
+struct _expr_tree_atom {
 	Atom atom;
 	ETN_ref next;
 
-	expr_tree_atom(const Atom &a) : atom(a), next(nullptr) {}
+	_expr_tree_atom(const Atom &a) : atom(a), next(nullptr) {}
 };
 
-struct expr_tree_op {
+struct _expr_tree_op {
 	Operation op;
 	Domain dom;
 	ETN_ref down;
 	ETN_ref next; // For next operand
 };
 
-struct ETN : std::variant <expr_tree_atom, expr_tree_op> {
-	using std::variant <expr_tree_atom, expr_tree_op> ::variant;
+struct ETN : auto_variant <_expr_tree_atom, _expr_tree_op> {
+	using auto_variant <_expr_tree_atom, _expr_tree_op> ::auto_variant;
+
+	// ETN(const Atom &);
+	// ETN(const Operation &);
+
+	ETN(const ETN &) = delete;
+	ETN &operator=(const ETN &) = delete;
 
 	bool has_atom() const;
 	bool has_op() const;
+
+	// TODO: clone and free
+	// ETN_ref clone() const;
 
 	std::vector <Symbol> symbols() const;
 

@@ -200,7 +200,7 @@ std::optional <std::pair <Signature, size_t>> signature_from_tokens(const std::v
 // TODO: custom allocator for more coherent trees
 ETN_ref rpes_to_etn(const std::vector <RPE> &rpes)
 {
-	std::stack <ETN> operands;
+	std::stack <ETN_ref> operands;
 
 	std::deque <RPE> queued {
 		rpes.begin(),
@@ -214,8 +214,8 @@ ETN_ref rpes_to_etn(const std::vector <RPE> &rpes)
 		// fmt::println("operand stack: {}", operands.size());
 
 		if (r.has_atom()) {
-			operands.push(r.atom());
-
+			ETN_ref atom = new ETN(_expr_tree_atom(r.atom()));
+			operands.push(atom);
 			// fmt::println("constructed ETN (atom) for: {}", r.atom());
 		} else {
 			if (operands.size() < 2) {
@@ -224,19 +224,19 @@ ETN_ref rpes_to_etn(const std::vector <RPE> &rpes)
 			}
 
 			// Assume binary for now
-			ETN_ref rhs = new ETN(operands.top());
+			ETN_ref rhs = operands.top();
 			operands.pop();
 
-			ETN_ref lhs = new ETN(operands.top());
+			ETN_ref lhs = operands.top();
 			operands.pop();
 
 			lhs->next() = rhs;
 
-			ETN opt = expr_tree_op {
+			ETN_ref opt = new ETN(_expr_tree_op {
 				.op = r.op(),
 				.down = lhs,
 				.next = nullptr
-			};
+			});
 
 			operands.push(opt);
 
@@ -244,8 +244,8 @@ ETN_ref rpes_to_etn(const std::vector <RPE> &rpes)
 		}
 	}
 
-	auto root = operands.top();
-	return new ETN(root);
+	// TODO: some checking here...
+	return operands.top();
 }
 
 std::optional <Expression> Expression::from(const std::string &s)
