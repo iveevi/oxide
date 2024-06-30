@@ -111,14 +111,14 @@ std::string format_as(const ETN &etn, int indent)
 	}
 
 	_fmt_token_dispatcher ftd(result);
-	if (etn.has_atom()) {
-		auto atom = std::get <0> (etn).atom;
+	if (etn.is <_expr_tree_atom> ()) {
+		auto atom = etn.as <_expr_tree_atom> ().atom;
 
 		result += "[";
 			std::visit(ftd, atom);
 		result += "]";
 	} else {
-		auto tree = std::get <1> (etn);
+		auto tree = etn.as <_expr_tree_op> ();
 
 		result += "[";
 			ftd(tree.op);
@@ -152,11 +152,11 @@ std::string _etn_to_string(const ETN *etn)
 	std::string result;
 
 	_fmt_token_dispatcher ftd(result);
-	if (etn->has_atom()) {
-		auto atom = std::get <0> (*etn).atom;
+	if (etn->is <_expr_tree_atom> ()) {
+		auto atom = etn->as <_expr_tree_atom> ().atom;
 		std::visit(ftd, atom);
 	} else {
-		auto tree = std::get <1> (*etn);
+		auto tree = etn->as <_expr_tree_op> ();
 
 		// TODO: check if binary
 		result += "(";

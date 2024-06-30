@@ -27,16 +27,6 @@ std::optional <Signature> join(const Signature &A, const Signature &B)
 }
 
 // ETN
-bool ETN::has_atom() const
-{
-	return std::holds_alternative <_expr_tree_atom> (*this);
-}
-
-bool ETN::has_op() const
-{
-	return std::holds_alternative <_expr_tree_op> (*this);
-}
-
 std::vector <Symbol> ETN::symbols() const
 {
 	std::vector <Symbol> symbols;
@@ -47,8 +37,8 @@ std::vector <Symbol> ETN::symbols() const
 		auto e = refs.front();
 		refs.pop();
 
-		if (e->has_op()) {
-			auto etop = std::get <1> (*e);
+		if (e->is <_expr_tree_op> ()) {
+			auto etop = e->as <_expr_tree_op> ();
 
 			ETN_ref head = etop.down;
 			while (head) {
@@ -56,7 +46,7 @@ std::vector <Symbol> ETN::symbols() const
 				head = head->next();
 			}
 		} else {
-			auto eta = std::get <0> (*e).atom;
+			auto eta = e->as <_expr_tree_atom> ().atom;
 			if (eta.is <Symbol> ())
 				symbols.push_back(eta.as <Symbol> ());
 		}

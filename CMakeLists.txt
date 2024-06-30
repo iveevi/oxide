@@ -5,14 +5,19 @@ set(CMAKE_CXX_STANDARD 20)
 project(oxide CXX)
 
 add_executable(oxide
-	source/main.cpp
-	source/lex.cpp
+	source/formalism.cpp
 	source/format.cpp
-	source/parse.cpp
-	source/formalism.cpp)
+	source/lex.cpp
+	source/main.cpp
+	source/match.cpp
+	source/memory.cpp
+	source/parse.cpp)
 
 include_directories(.)
 
-target_compile_options(oxide PRIVATE -fconcepts-diagnostics-depth=2)
+target_compile_options(oxide PRIVATE
+	-fsanitize=address
+	-fconcepts-diagnostics-depth=2)
 
-target_link_libraries(oxide PRIVATE fmt)
+target_link_libraries(oxide PRIVATE fmt
+	-fsanitize=address)

@@ -7,6 +7,7 @@
 
 #include "include/std.hpp"
 #include "include/types.hpp"
+#include "include/memory.hpp"
 
 // Formal arguments
 // TODO:: Operation to be a variant of function and binary op
@@ -79,17 +80,8 @@ struct _expr_tree_op {
 struct ETN : auto_variant <_expr_tree_atom, _expr_tree_op> {
 	using auto_variant <_expr_tree_atom, _expr_tree_op> ::auto_variant;
 
-	// ETN(const Atom &);
-	// ETN(const Operation &);
-
 	ETN(const ETN &) = delete;
 	ETN &operator=(const ETN &) = delete;
-
-	bool has_atom() const;
-	bool has_op() const;
-
-	// TODO: clone and free
-	// ETN_ref clone() const;
 
 	std::vector <Symbol> symbols() const;
 
@@ -104,6 +96,8 @@ struct Expression {
 	std::vector <Symbol> symbols() const;
 
 	static std::optional <Expression> from(const std::string &);
+
+	Expression &drop(scoped_memory_manager &);
 };
 
 struct Statement {
@@ -115,4 +109,6 @@ struct Statement {
 	std::vector <Symbol> symbols() const;
 
 	static std::optional <Statement> from(const std::string &);
+
+	Statement &drop(scoped_memory_manager &);
 };
