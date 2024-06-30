@@ -1,6 +1,7 @@
 #include "include/formalism.hpp"
 #include "include/memory.hpp"
 #include "include/match.hpp"
+#include "include/format.hpp"
 
 // Scoped memory management
 scoped_memory_manager::~scoped_memory_manager()
@@ -10,6 +11,17 @@ scoped_memory_manager::~scoped_memory_manager()
 
 void scoped_memory_manager::drop(ETN_ref etn)
 {
+	// TODO: enable only on debug mode
+	auto copy = deferred;
+	while (copy.size()) {
+		if (copy.front() == etn) {
+			fmt::println("double free detected on address {}", (void *) etn);
+			abort();
+		}
+
+		copy.pop();
+	}
+
 	if (etn->is <_expr_tree_op> ()) {
 		auto tree = etn->as <_expr_tree_op> ();
 

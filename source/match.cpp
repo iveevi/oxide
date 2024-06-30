@@ -209,14 +209,21 @@ ETN_ref Substitution::apply(const ETN_ref &etn)
 
 		return netn;
 	} else {
+		// NOTE: When cloning, we need to null the .next field
+		// since nodes are not necessarily in the same order
 		auto atom = etn->as <_expr_tree_atom> ().atom;
 		if (atom.is <Symbol> ()) {
 			Symbol sym = atom.as <Symbol> ();
-			if (contains(sym))
-				return clone(this->operator[](sym).etn);
+			if (contains(sym)) {
+				ETN_ref setn = clone(this->operator[](sym).etn);
+				setn->next() = nullptr;
+				return setn;
+			}
 		}
 
-		return clone(etn);
+		ETN_ref setn = clone(etn);
+		setn->next() = nullptr;
+		return setn;
 	}
 }
 

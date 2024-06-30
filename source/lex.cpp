@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "include/lex.hpp"
+#include "include/format.hpp"
 
 // Lexing compound
 template <typename T, typename E = int>
@@ -108,6 +109,36 @@ ParseResult <Operation> lex_operation(const std::string &s, size_t pos)
 	return ParseResult <Operation> ::fail();
 }
 
+template <typename T>
+ParseResult <Token> lex_keyword(const std::string &s, size_t pos, const std::string &kw)
+{
+	for (size_t i = 0; i < kw.size(); i++, pos++) {
+		if (pos >= s.size())
+			return ParseResult <Token> ::fail();
+
+		if (s[pos] != kw[i])
+			return ParseResult <Token> ::fail();
+	}
+
+	return ParseResult <Token> ::ok(T(), pos);
+}
+
+ParseResult <Token> lex_keyword(const std::string &s, size_t pos)
+{
+	using kw_lexer = decltype(&lex_keyword <Cache>);
+
+	static const std::unordered_map <std::string, kw_lexer> kw_lexers {
+		{ "axiom", &lex_keyword <Axiom> }
+	};
+
+	for (const auto &[kw, lexer] : kw_lexers) {
+		auto result = lexer(s, pos, kw);
+		if (result)
+			return result;
+	}
+
+	return ParseResult <Token> ::fail();
+}
 
 ParseResult <Symbol> lex_symbol(const std::string &s, size_t pos)
 {
@@ -136,11 +167,25 @@ ParseResult <Token> lex_special(const std::string &s, size_t pos)
 
 	switch (c) {
 	case '=':
+		if (pos < s.size() && s[pos] == '>')
+			return ParseResult <Token> ::ok(Implies(), ++pos);
+
 		return ParseResult <Token> ::ok(Equals(), pos);
 	case ',':
 		return ParseResult <Token> ::ok(Comma(), pos);
 	case ':':
+		if (pos < s.size() && s[pos] == '=')
+			return ParseResult <Token> ::ok(Define(), ++pos);
+
 		return ParseResult <Token> ::ok(In(), pos);
+	case '$':
+		if (pos < s.size() && s[pos] == '(')
+			return ParseResult <Token> ::ok(SymbolicBegin(), ++pos);
+		break;
+	case '(':
+		return ParseResult <Token> ::ok(ParenthesisBegin(), pos);
+	case ')':
+		return ParseResult <Token> ::ok(GroupEnd(), pos);
 	case '[':
 		return ParseResult <Token> ::ok(SignatureBegin(), pos);
 	case ']':
@@ -176,6 +221,9 @@ std::vector <Token> lex(const std::string &s)
 				result.push_back(real_result.value);
 				pos = real_result.next;
 			}
+		} else if (auto keyword_result = lex_keyword(s, pos)) {
+			result.push_back(keyword_result.value);
+			pos = keyword_result.next;
 		} else if (std::isalpha(c)) {
 			auto symbol_result = lex_symbol(s, pos);
 			assert(symbol_result);

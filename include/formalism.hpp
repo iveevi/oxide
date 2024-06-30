@@ -112,3 +112,5 @@ struct Statement {
 
 	Statement &drop(scoped_memory_manager &);
 };
+
+using Symbolic = auto_variant <Expression, Statement>;

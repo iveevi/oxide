@@ -16,6 +16,7 @@ add_executable(oxide
 include_directories(.)
 
 target_compile_options(oxide PRIVATE
+	-Wall
 	-fsanitize=address
 	-fconcepts-diagnostics-depth=2)
 

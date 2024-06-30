@@ -27,31 +27,53 @@ struct _fmt_token_dispatcher {
 	std::string &ref;
 
 	void operator()(Integer i) {
-		ref += fmt::format("{}", i.value);
+		ref += fmt::format("I:{}", i.value);
 	}
 
 	void operator()(Real r) {
-		ref += fmt::format("{}", r.value);
+		ref += fmt::format("R:{}", r.value);
 	}
 
 	void operator()(Symbol symbol) {
+		ref += "sym:";
 		ref += symbol;
 	}
 
 	void operator()(Operation op) {
+		ref += "op:";
 		ref += op_strs[op];
 	}
 
 	void operator()(Equals) {
-		ref += '=';
+		ref += "eq";
 	}
 
 	void operator()(Comma) {
-		ref += ',';
+		ref += "comma";
 	}
 
 	void operator()(In) {
 		ref += "in";
+	}
+
+	void operator()(Define) {
+		ref += "define";
+	}
+
+	void operator()(Implies) {
+		ref += "implies";
+	}
+
+	void operator()(SymbolicBegin) {
+		ref += "<symbolic-begin>";
+	}
+
+	void operator()(ParenthesisBegin) {
+		ref += "<paren-begin>";
+	}
+
+	void operator()(GroupEnd) {
+		ref += "<group-end>";
 	}
 
 	void operator()(SignatureBegin) {
@@ -60,6 +82,10 @@ struct _fmt_token_dispatcher {
 
 	void operator()(SignatureEnd) {
 		ref += "<sig-end>";
+	}
+
+	void operator()(Axiom) {
+		ref += "axiom";
 	}
 
 	template <typename T>
@@ -101,6 +127,35 @@ std::string format_as(const std::vector <Token> &tokens)
 	return "[" + result + "]";
 }
 
+struct _fmt_atom_dispatcher {
+	std::string &ref;
+
+	void operator()(Integer i) {
+		ref += fmt::format("{}", i.value);
+	}
+
+	void operator()(Real r) {
+		ref += fmt::format("{}", r.value);
+	}
+
+	void operator()(Symbol symbol) {
+		ref += symbol;
+	}
+
+	void operator()(Operation op) {
+		ref += op_strs[op];
+	}
+
+	template <typename T>
+	void operator()(T x) {
+		ref += "?";
+	}
+
+	static constexpr const char *op_strs[] = {
+		"none", "+", "-", "*", "/"
+	};
+};
+
 std::string format_as(const ETN &etn, int indent)
 {
 	std::string result;
@@ -110,19 +165,25 @@ std::string format_as(const ETN &etn, int indent)
 		result += " └──";
 	}
 
-	_fmt_token_dispatcher ftd(result);
+	_fmt_atom_dispatcher ftd(result);
 	if (etn.is <_expr_tree_atom> ()) {
 		auto atom = etn.as <_expr_tree_atom> ().atom;
 
 		result += "[";
 			std::visit(ftd, atom);
 		result += "]";
+
+		// TODO: on debug only
+		result += fmt::format(" ({})", (void *) &etn);
 	} else {
 		auto tree = etn.as <_expr_tree_op> ();
 
 		result += "[";
 			ftd(tree.op);
 		result += "]";
+
+		// TODO: on debug only
+		result += fmt::format(" ({})", (void *) &etn);
 
 		ETN *d = tree.down;
 		while (d) {
@@ -151,7 +212,7 @@ std::string _etn_to_string(const ETN *etn)
 {
 	std::string result;
 
-	_fmt_token_dispatcher ftd(result);
+	_fmt_atom_dispatcher ftd(result);
 	if (etn->is <_expr_tree_atom> ()) {
 		auto atom = etn->as <_expr_tree_atom> ().atom;
 		std::visit(ftd, atom);
