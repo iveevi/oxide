@@ -14,6 +14,7 @@ struct Comma {};
 struct In {};
 struct Define {};
 struct Implies {};
+struct Semicolon {};
 
 // Grouping
 struct SymbolicBegin {};
@@ -30,7 +31,7 @@ struct Cache {};
 using _token_base = auto_variant <
 	Integer, Real, Symbol,
 	Operation,
-	Equals, Comma, In, Define, Implies,
+	Equals, Comma, In, Define, Implies, Semicolon,
 	SymbolicBegin, ParenthesisBegin, GroupEnd,
 	SignatureBegin, SignatureEnd,
 	Axiom, Cache

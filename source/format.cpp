@@ -64,6 +64,10 @@ struct _fmt_token_dispatcher {
 		ref += "implies";
 	}
 
+	void operator()(Semicolon) {
+		ref += "semicolon";
+	}
+
 	void operator()(SymbolicBegin) {
 		ref += "<symbolic-begin>";
 	}
@@ -246,4 +250,18 @@ std::string format_as(const Statement &stmt)
 	return _etn_to_string(stmt.lhs.etn)
 		+ " = " + _etn_to_string(stmt.rhs.etn)
 		+ " " + format_as(stmt.signature);
+}
+
+std::string format_as(const RValue &rv)
+{
+	if (rv.is <Expression> ())
+		return format_as(rv.as <Expression> ());
+
+	if (rv.is <Statement> ())
+		return format_as(rv.as <Statement> ());
+
+	if (rv.is <Symbol> ())
+		return rv.as <Symbol> ();
+
+	return "<?>";
 }

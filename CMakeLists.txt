@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 
 set(CMAKE_CXX_STANDARD 20)
 
-project(oxide CXX)
+project(oxidius CXX)
 
-add_executable(oxide
+add_executable(oxidius
 	source/formalism.cpp
 	source/format.cpp
 	source/lex.cpp
@@ -15,10 +15,10 @@ add_executable(oxide
 
 include_directories(.)
 
-target_compile_options(oxide PRIVATE
+target_compile_options(oxidius PRIVATE
 	-Wall
 	-fsanitize=address
 	-fconcepts-diagnostics-depth=2)
 
-target_link_libraries(oxide PRIVATE fmt
+target_link_libraries(oxidius PRIVATE fmt
 	-fsanitize=address)

@@ -6,6 +6,7 @@
 
 #include "include/lex.hpp"
 #include "include/formalism.hpp"
+#include "include/action.hpp"
 
 std::string format_as(const Domain &);
 std::string format_as(const Atom &);
@@ -15,3 +16,4 @@ std::string format_as(const ETN &, int = 0);
 std::string format_as(const Signature &);
 std::string format_as(const Expression &);
 std::string format_as(const Statement &);
+std::string format_as(const RValue &);

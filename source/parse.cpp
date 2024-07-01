@@ -1,12 +1,14 @@
-#include "include/parse.hpp"
 #include <vector>
 #include <deque>
 #include <stack>
 
+#include "include/action.hpp"
 #include "include/format.hpp"
 #include "include/lex.hpp"
 #include "include/formalism.hpp"
 #include "include/std.hpp"
+#include "include/parse.hpp"
+#include "include/types.hpp"
 
 // Element in a reverse polish stack
 struct RPE : std::variant <Atom, Operation> {
@@ -346,13 +348,19 @@ std::optional <Statement> Statement::from(const std::string &s)
 }
 
 // Parsing more general programs
-#define RETURN_ON_EMPTY_STREAM(v) \
-	auto t = next();          \
-	if (!t)                   \
-		return v;         \
+#define PEEK_AND_RETURN_ON_EMPTY_STREAM(v) \
+	auto t = next(false);              \
+	if (!t)                            \
+		return v;                  \
 	auto token = t.value();
 
-std::optional <Expression> TokenStreamParser::parse_symbolic_expression(const RPE_vector &rpev)
+#define CONSUME_AND_RETURN_ON_EMPTY_STREAM(v) \
+	auto t = next();                      \
+	if (!t)                               \
+		return v;                     \
+	auto token = t.value();
+
+auto_optional <Expression> TokenStreamParser::parse_symbolic_expression(const RPE_vector &rpev)
 {
 	fmt::println("expression!");
 
@@ -382,7 +390,7 @@ std::optional <Expression> TokenStreamParser::parse_symbolic_expression(const RP
 	};
 }
 
-std::optional <Statement> TokenStreamParser::parse_symbolic_statement(const RPE_vector &lhs_rpev)
+auto_optional <Statement> TokenStreamParser::parse_symbolic_statement(const RPE_vector &lhs_rpev)
 {
 	fmt::println("statement!");
 
@@ -431,7 +439,7 @@ std::optional <Statement> TokenStreamParser::parse_symbolic_statement(const RPE_
 	};
 }
 
-std::optional <Symbolic> TokenStreamParser::parse_symbolic()
+auto_optional <Symbolic> TokenStreamParser::parse_symbolic_scope()
 {
 	// At least one expression
 	RPE_vector rpev = rpe_vector(stream, 0);
@@ -443,119 +451,243 @@ std::optional <Symbolic> TokenStreamParser::parse_symbolic()
 	size_t offset = rpev.size();
 	if (offset >= stream.size()) {
 		fmt::println("full listing, expression");
-		return std::nullopt;
+
+		return TokenStreamParser(stream, offset + 1)
+			.parse_symbolic_expression(rpev)
+			.translate <Symbolic> ();
 	}
 
 	Token middle = stream[offset];
 	if (middle.is <Equals> ()) {
-		auto expr = TokenStreamParser(stream, offset + 1)
-			.parse_symbolic_statement(rpev);
+		return TokenStreamParser(stream, offset + 1)
+			.parse_symbolic_statement(rpev)
+			.translate <Symbolic> ();
+	}
 
-		if (expr)
-			return expr.value();
+	return TokenStreamParser(*this)
+		.parse_symbolic_expression(rpev)
+		.translate <Symbolic> ();
+}
 
+auto_optional <Symbolic> TokenStreamParser::parse_symbolic()
+{
+	auto t = next();
+	if (!t)
+		return std::nullopt;
+
+	auto token = t.value();
+	if (!token.is <SymbolicBegin> ()) {
+		fmt::println("no symbolic begin");
 		return std::nullopt;
 	}
 
-	auto stmt = TokenStreamParser(*this)
-		.parse_symbolic_expression(rpev);
+	// Find the end of the group
+	size_t end = pos;
 
-	if (stmt)
-		return stmt.value();
+	size_t count = 0;
+	while (end < stream.size()) {
+		auto t = stream[end];
+
+		if (t.is <SymbolicBegin> ()) {
+			fmt::println("cannot nested $(...) expressions!");
+			return std::nullopt;
+		}
+
+		if (t.is <ParenthesisBegin> ())
+			count++;
+
+		if (t.is <GroupEnd> () && ((count--) == 0)) {
+			fmt::println("end is at {}", end);
+			break;
+		}
+
+		end++;
+	}
+
+	if (!stream[end].is <GroupEnd> ()) {
+		fmt::println("unclosed $(...) expression");
+		return std::nullopt;
+	}
+
+	fmt::println("end of symbolic block is offset {}", end - pos);
+
+	Stream slice(stream.begin() + pos, stream.begin() + end);
+	for (auto t : slice)
+		fmt::print("{} ", t);
+	fmt::println("");
+
+	return TokenStreamParser(slice, 0)
+		.parse_symbolic_scope()
+		.inspect([&](auto) {
+			pos = end + 1;
+		});
+}
+
+auto_optional <Symbol> TokenStreamParser::parse_symbol()
+{
+	if (pos >= stream.size())
+		return std::nullopt;
+
+	Symbol symbol;
+	while (auto t = next()) {
+		if (!t->is <Symbol> ())
+			break;
+
+		symbol += t->as <Symbol> ();
+	}
+
+	fmt::println("total symbol: {}", symbol);
+
+	backup();
+
+	return symbol.size() ? auto_optional <Symbol> (symbol) : std::nullopt;
+}
+
+auto_optional <RValue> TokenStreamParser::parse_rvalue()
+{
+	if (auto sym = parse_symbol())
+		return sym.translate <RValue> ();
+
+	if (auto sym = parse_symbolic()) {
+		return sym.translate([](const auto &sym) -> RValue {
+			return sym.translate(RValue());
+		});
+	}
 
 	return std::nullopt;
 }
 
-std::optional <Symbolic> TokenStreamParser::parse_from_symbol_define(const std::string &symbol)
+auto_optional <TokenStreamParser::RValue_vec> TokenStreamParser::parse_args()
 {
-	RETURN_ON_EMPTY_STREAM(std::nullopt)
+	// TODO: reset structure, returns nullopt and records original position
 
-	if (token.is <SymbolicBegin> ()) {
-		fmt::println("start of expression/statement!");
+	auto t = next();
+	if (!t)
+		return {};
 
-		// Find the end of the group
-		size_t end = pos;
+	auto token = t.value();
+	if (!token.is <ParenthesisBegin> ())
+		return std::nullopt;
 
-		size_t count = 0;
-		while (end < stream.size()) {
-			auto t = stream[end];
-
-			if (t.is <SymbolicBegin> ()) {
-				fmt::println("cannot nested $(...) expressions!");
+	RValue_vec args;
+	while (true) {
+		auto opt_arg = parse_rvalue();
+		if (!opt_arg) {
+			if (args.size()) {
+				fmt::println("expected another rvalue");
 				return std::nullopt;
 			}
 
-			if (t.is <ParenthesisBegin> ())
-				count++;
-
-			if (t.is <GroupEnd> () && ((count--) == 0)) {
-				fmt::println("end is at {}", end);
-				break;
-			}
-
-			end++;
+			break;
 		}
 
-		if (!stream[end].is <GroupEnd> ()) {
-			fmt::println("unclosed $(...) expression");
-			return std::nullopt;
+		args.push_back(opt_arg.value());
+
+		auto opt_comma = next();
+		if (!opt_comma || !opt_comma->is <Comma> ()) {
+			backup();
+			break;
 		}
-
-		fmt::println("end of symbolic block is offset {}", end - pos);
-
-		Stream slice(stream.begin() + pos, stream.begin() + end);
-		for (auto t : slice)
-			fmt::print("{} ", t);
-		fmt::println("");
-
-		return TokenStreamParser(slice, 0)
-			.parse_symbolic();
-	} else {
-		fmt::println("unexpected {}", token);
-		return std::nullopt;
 	}
+
+	// TODO: null_or_not <...> ()?
+	t = next();
+	if (!t)
+		return std::nullopt;
+
+	token = t.value();
+	if (!token.is <GroupEnd> ())
+		return std::nullopt;
+
+	return args;
 }
 
-std::optional <DefineSymbolic> TokenStreamParser::parse_from_symbol(const std::string &symbol)
+auto_optional <Action> TokenStreamParser::parse_statement()
 {
-	RETURN_ON_EMPTY_STREAM(DefineSymbolic())
+	auto t = next(false);
+	if (!t)
+		return std::nullopt;
 
+	auto token = t.value();
+	if (!token.is <Symbol> ()) {
+		fmt::println("all statements must begin with a symbol");
+		return std::nullopt;
+	}
+
+	auto s = parse_symbol();
+	if (!s) {
+		fmt::println("fatal error...");
+	}
+
+	Symbol symbol = s.value();
+	fmt::println("symbol: {}", symbol);
+
+	// Either define or call
+	Action action;
+
+	t = next();
+	if (!t) {
+		fmt::println("expected a defintion or a call");
+		return std::nullopt;
+	}
+
+	token = t.value();
 	if (token.is <Define> ()) {
-		fmt::println("define!");
-		auto symbolic = TokenStreamParser(*this)
-			.parse_from_symbol_define(symbol);
+		fmt::println("token after define: {}", stream[pos]);
+		auto value = parse_rvalue();
+		if (!value) {
+			fmt::println("failed to parse RValue");
+			return std::nullopt;
+		}
 
-		if (!symbolic)
+		fmt::println("got value...");
+		fmt::println("next token is: {}", stream[pos]);
+
+		action = DefineSymbol {
+			.identifier = symbol,
+			.value = value.value().translate(RValue())
+		};
+	} else if (token.is <ParenthesisBegin> ()) {
+		backup();
+
+		auto opt_args = parse_args();
+		if (!opt_args)
 			return std::nullopt;
 
-		return DefineSymbolic { symbol, symbolic.value() };
+		action = Call {
+			.ftn = symbol,
+			.args = opt_args.value()
+		};
+
+		fmt::println("# of args: {}", opt_args->size());
 	} else {
-		fmt::println("unexpected {}", token);
+		fmt::println("unexpected {}, expected a definition or a call", token);
 		return std::nullopt;
 	}
-}
 
-// TODO: return a list of actions
-std::optional <Action> TokenStreamParser::parse_action()
-{
-	RETURN_ON_EMPTY_STREAM(Action())
-
-	if (token.is <Symbol> ()) {
-		fmt::println("sym: {}", token.as <Symbol> ());
-		auto ds = TokenStreamParser(*this)
-			.parse_from_symbol(token.as <Symbol> ());
-
-		if (!ds)
-			return std::nullopt;
-
-		return ds.value();
-	} else {
-		fmt::println("unexpected {}", token);
+	auto end = next();
+	if (!end) {
+		fmt::println("every statement must end with a semicolon");
 		return std::nullopt;
 	}
+
+	if (!end->is <Semicolon> ()) {
+		fmt::println("unexpected {}, expected ';'", end.value());
+		return std::nullopt;
+	}
+
+	return action;
 }
 
 std::vector <Action> TokenStreamParser::parse()
 {
-	return { parse_action().value() };
+	// TODO: sink for diagnostics
+	std::vector <Action> actions;
+
+	while (auto action = parse_statement()) {
+		fmt::println("loop {}/{}", pos, stream.size());
+		actions.push_back(action.value());
+	}
+
+	return actions;
 }

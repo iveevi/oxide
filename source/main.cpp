@@ -11,22 +11,34 @@
 #include "include/memory.hpp"
 #include "include/types.hpp"
 
+// Expample derivation: a * x + b = 0 => x = (0 - b)/a
 // a * x + b = 0
 // a * x = 0 - b <- (a + b = 0 => a = 0 - b)
 // x = (0 - b)/a <- (a * b = c => b = c/a)
 
-// Example oxide program
+// Example oxidius program
 // axiom: anonymous within the scope
 
 // axiom := $(a = b) => $(b = a)
 // axiom := $(a + b = c) => $(a = c - b)
 auto program = R"(
-E := $(a + b + c = a + b - c)
+X := Y;
+commutativity := $(a + b = b + a);
+E := $(x + y + z);
+transform(E, commutativity, $(a * b));
 )";
 
 // Context for any session
 struct Oxidius {
 	scoped_memory_manager smm;
+
+	void drop_rvalue(RValue &rv) {
+		if (rv.is <Statement> ())
+			rv.as <Statement> ().drop(smm);
+
+		if (rv.is <Expression> ())
+			rv.as <Expression> ().drop(smm);
+	}
 
 	void run(const std::string &program) {
 		auto tokens = lex(program);
@@ -34,15 +46,28 @@ struct Oxidius {
 
 		for (auto action : actions) {
 			// TODO: use std visit with Oxidius itself
-			if (action.is <DefineSymbolic> ()) {
-				auto ds = action.as <DefineSymbolic> ();
-				fmt::print("assigned to {}:", ds.identifier);
+			if (action.is <DefineSymbol> ()) {
+				auto ds = action.as <DefineSymbol> ();
+				drop_rvalue(ds.value);
+				fmt::print("assigned to {} ", ds.identifier);
 				if (ds.value.is <Statement> ()) {
-					fmt::println("{}", ds.value.as <Statement> ());
-					ds.value.as <Statement> ().drop(smm);
+					fmt::println("-> {}", ds.value.as <Statement> ());
+					// ds.value.as <Statement> ().drop(smm);
+				} else if (ds.value.is <Expression> ()){
+					fmt::println("-> {}", ds.value.as <Expression> ());
+					// ds.value.as <Expression> ().drop(smm);
 				} else {
-					fmt::println("{}", ds.value.as <Expression> ());
-					ds.value.as <Expression> ().drop(smm);
+					fmt::println("-> {}", ds.value.as <Symbol> ());
+				}
+			} else if (action.is <Call> ()) {
+				auto call = action.as <Call> ();
+
+				fmt::println("call with {}", call.ftn);
+
+				// TODO: format...
+				for (auto &rv : call.args) {
+					fmt::println("  arg: {}", rv);
+					drop_rvalue(rv);
 				}
 			} else {
 				fmt::println("unsupported action...");

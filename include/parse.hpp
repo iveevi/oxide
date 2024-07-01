@@ -9,8 +9,11 @@
 
 struct RPE;
 
+// TODO: argument type for =>
+
 struct TokenStreamParser {
 	using Stream = std::vector <Token>;
+	using RValue_vec = std::vector <RValue>;
 
 	Stream &stream;
 	size_t pos;
@@ -27,14 +30,28 @@ struct TokenStreamParser {
 		return stream[p];
 	}
 
-	std::optional <Expression> parse_symbolic_expression(const std::vector <RPE> &);
-	std::optional <Statement> parse_symbolic_statement(const std::vector <RPE> &);
-	std::optional <Symbolic> parse_symbolic();
+	auto backup() {
+		// Do not go past the beginning,
+		// and preserve EOF state
+		if (pos > 0 && pos < stream.size())
+			pos--;
 
-	std::optional <Symbolic> parse_from_symbol_define(const std::string &);
-	std::optional <DefineSymbolic> parse_from_symbol(const std::string &);
+		return *this;
+	}
 
-	std::optional <Action> parse_action();
+	auto_optional <Expression> parse_symbolic_expression(const std::vector <RPE> &);
+	auto_optional <Statement> parse_symbolic_statement(const std::vector <RPE> &);
+	auto_optional <Symbolic> parse_symbolic_scope();
+
+	auto_optional <Symbolic> parse_symbolic();
+	auto_optional <Symbol> parse_symbol();
+	auto_optional <RValue> parse_rvalue();
+
+	auto_optional <RValue_vec> parse_args();
+
+	auto_optional <Action> parse_statement();
+
+	auto_optional <Action> parse_action();
 
 	std::vector <Action> parse();
 };

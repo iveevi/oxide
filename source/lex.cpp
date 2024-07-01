@@ -75,7 +75,7 @@ ParseResult <Real, bool> lex_real(const std::string &s, size_t pos)
 		Real::value_type sub = 0;
 
 		while ((c = s[pos]) && std::isdigit(c)) {
-			sub += Real::value_type(c - '0') * std::powl(10.0, -power);
+			sub += Real::value_type(c - '0') * std::pow(10.0, -power);
 			power++;
 			pos++;
 		}
@@ -182,6 +182,8 @@ ParseResult <Token> lex_special(const std::string &s, size_t pos)
 		if (pos < s.size() && s[pos] == '(')
 			return ParseResult <Token> ::ok(SymbolicBegin(), ++pos);
 		break;
+	case ';':
+		return ParseResult <Token> ::ok(Semicolon(), pos);
 	case '(':
 		return ParseResult <Token> ::ok(ParenthesisBegin(), pos);
 	case ')':
