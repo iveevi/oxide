@@ -14,6 +14,8 @@ struct scoped_memory_manager {
 
 	~scoped_memory_manager();
 
+	void transfer_to(scoped_memory_manager &);
+
 	void drop(ETN_ref);
 	void drop(const Expression &);
 	void drop(const Statement &);

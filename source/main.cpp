@@ -4,6 +4,7 @@
 #include <fmt/std.h>
 #include <fmt/format.h>
 #include <fmt/core.h>
+#include <type_traits>
 
 #include "include/action.hpp"
 #include "include/formalism.hpp"
@@ -14,6 +15,11 @@
 #include "include/memory.hpp"
 #include "include/std.hpp"
 #include "include/types.hpp"
+#include "include/hash.hpp"
+
+// TODO: scoring system to incentivize
+// generating f(x)=0 -> x=g(...) solutions
+// and probably other forms
 
 // Expample derivation: a * x + b = 0 => x = (0 - b)/a
 // a * x + b = 0
@@ -28,50 +34,45 @@
 auto program = R"(
 commutativity := $(a + b = b + a);
 E := $(x + y + z);
-transform(E, commutativity);
+transform($(z * x + y), commutativity);
 )";
-
-// Explicit void type for distinction
-struct Void {};
-
-// TODO: tuple type
-struct Error {};
-
-using _result_base = auto_variant <
-	Void, RValue, Error
->;
-
-struct Result : _result_base {
-	using _result_base::_result_base;
-};
 
 Result _transform(const Expression &expr, const Statement &stmt)
 {
-	scoped_memory_manager smm;
+	// TODO: check for transformations in lower trees
+	ExprTable_L1 table;
 
 	fmt::println("transform: on {}", expr);
 
 	auto opt_sub_lhs = match(stmt.lhs, expr);
 	if (opt_sub_lhs) {
-		auto sub_lhs = opt_sub_lhs.value().drop(smm);
+		auto sub_lhs = opt_sub_lhs.value().drop(table.smm);
 		fmt::println("lhs sub:");
 		for (const auto &[s, e] : sub_lhs)
 			fmt::println("  {} -> {}", s, e);
 
-		auto subbed = sub_lhs.apply(stmt.rhs).drop(smm);
+		auto subbed = sub_lhs.apply(stmt.rhs).drop(table.smm);
 		fmt::println("result: {}", subbed);
+		fmt::println("  hash = {}", quick_hash(subbed));
+
+		table.push(subbed.etn);
 	}
 
 	auto opt_sub_rhs = match(stmt.rhs, expr);
 	if (opt_sub_rhs) {
-		auto sub_rhs = opt_sub_rhs.value().drop(smm);
+		auto sub_rhs = opt_sub_rhs.value().drop(table.smm);
 		fmt::println("rhs sub:");
 		for (const auto &[s, e] : sub_rhs)
 			fmt::println("  {} -> {}", s, e);
 
-		auto subbed = sub_rhs.apply(stmt.lhs).drop(smm);
+		auto subbed = sub_rhs.apply(stmt.lhs).drop(table.smm);
 		fmt::println("result: {}", subbed);
+		fmt::println("  hash = {}", quick_hash(subbed));
+
+		table.push(subbed.etn);
 	}
+
+	fmt::println("table size: {}", table.unique);
 
 	return Void();
 }
@@ -101,8 +102,6 @@ Result transform(const std::vector <Symbolic> &args)
 }
 
 // Assigning general values to symbols
-// (1) UnresolvedValue -> includes Symbols
-// (2) ResolvedValue -> no Symbols
 using SymbolTable = std::unordered_map <Symbol, Symbolic>;
 
 struct _assignment_dispatcher {
@@ -174,72 +173,57 @@ struct Oxidius {
 			}
 
 			return table[sym];
-		} else if (rv.is <Expression> ()) {
-			return rv.as <Expression> ();
-		} else if (rv.is <Statement> ()) {
-			return rv.as <Statement> ();
 		}
 
-		return std::nullopt;
+		return rv.translate(Symbolic());
+	}
 
-		// TODO: translate with enable ifs...
-		// return rv.translate(Symbolic());
+	Result operator()(const DefineSymbol &ds) {
+		fmt::println("assigned {} -> {}", ds.identifier, ds.value);
+		_assignment_dispatcher ad(table, ds.identifier);
+		auto value = resolve_rvalue(ds.value);
+		return value ? std::visit(ad, value.value()) : Error();
+	}
+
+	Result operator()(const Call &call) {
+		if (!functions.contains(call.ftn)) {
+			fmt::println("no function {} defined", call.ftn);
+			return Error();
+		}
+
+		std::vector <Symbolic> resolved;
+
+		fmt::println("call with {}", call.ftn);
+		for (auto &rv : call.args) {
+			fmt::println("  arg: {}", rv);
+			auto rrv = resolve_rvalue(rv);
+			if (!rrv)
+				return Error();
+
+			resolved.push_back(rrv.value());
+		}
+
+		return functions[call.ftn](resolved);
+	}
+
+	template <typename T>
+	requires std::is_constructible_v <DefineAxiom, T>
+	Result operator()(const T &) {
+		fmt::println("action is not yet implemented!");
+		return Error();
 	}
 
 	void run(const std::string &program) {
 		auto tokens = lex(program);
 		auto actions = TokenStreamParser(tokens, 0).parse();
 
-		// TODO: first drop all actions
+		// Memory management
 		for (auto &action : actions)
 			std::visit(_drop_dispatcher(smm), action);
 
 		for (auto action : actions) {
-			// TODO: use std visit with Oxidius itself
-			if (action.is <DefineSymbol> ()) {
-				auto ds = action.as <DefineSymbol> ();
-				fmt::println("assigned {} -> {}", ds.identifier, ds.value);
-				_assignment_dispatcher ad(table, ds.identifier);
-				auto value = resolve_rvalue(ds.value);
-				if (!value)
-					break;
-				auto result = std::visit(ad, value.value());
-				if (result.is <Error> ())
-					break;
-			} else if (action.is <Call> ()) {
-				auto call = action.as <Call> ();
-
-				if (!functions.contains(call.ftn)) {
-					fmt::println("no function {} defined", call.ftn);
-					break;
-				}
-
-				Result result = Void();
-				std::vector <Symbolic> resolved;
-
-				fmt::println("call with {}", call.ftn);
-				for (auto &rv : call.args) {
-					fmt::println("  arg: {}", rv);
-					auto rrv = resolve_rvalue(rv);
-					if (!rrv) {
-						result = Error();
-						break;
-					}
-
-					resolved.push_back(rrv.value());
-				}
-
-				if (result.is <Error> ())
-					break;
-
-				result = functions[call.ftn](resolved);
-				if (result.is <Error> ())
-					break;
-
-				// TODO: otherwise...
-			} else {
-				fmt::println("unsupported action...");
-			}
+			if (std::visit(*this, action).is <Error> ())
+				break;
 		}
 	}
 };
@@ -248,11 +232,4 @@ int main()
 {
 	Oxidius context;
 	context.run(program);
-
-	fmt::println("sizes:");
-	fmt::println("  Atom: {} bytes", sizeof(Atom));
-	fmt::println("  ETN: {} bytes", sizeof(ETN));
-	fmt::println("  Signature: {} bytes", sizeof(Signature));
-	fmt::println("  Expression: {} bytes", sizeof(Expression));
-	fmt::println("  Statement: {} bytes", sizeof(Statement));
 }

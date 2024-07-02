@@ -7,6 +7,7 @@ project(oxidius CXX)
 add_executable(oxidius
 	source/formalism.cpp
 	source/format.cpp
+	source/hash.cpp
 	source/lex.cpp
 	source/main.cpp
 	source/match.cpp

@@ -1,13 +1,19 @@
 #pragma once
 
 #include <optional>
+#include <type_traits>
 #include <variant>
 
 template <typename ... _Args>
-struct _translate_once {
+struct _translate {
+	using variant_type = std::variant <_Args...>;
+
 	template <typename T>
-	std::variant <_Args...> operator()(const T &value) {
-		return value;
+	variant_type operator()(const T &value) {
+		if constexpr (std::is_constructible_v <variant_type, T>)
+			return value;
+
+		return variant_type();
 	}
 };
 
@@ -35,7 +41,7 @@ struct auto_variant : std::variant <Args...> {
 
 	template <typename ... _Args>
 	auto_variant <_Args...> translate(const std::variant <_Args...> &) const {
-		return std::visit(_translate_once <_Args...> (), *this);
+		return std::visit(_translate <_Args...> (), *this);
 	}
 };
 

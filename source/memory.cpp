@@ -9,6 +9,14 @@ scoped_memory_manager::~scoped_memory_manager()
 	clear();
 }
 
+void scoped_memory_manager::transfer_to(scoped_memory_manager &smm)
+{
+	while (deferred.size()) {
+		smm.deferred.push(deferred.front());
+		deferred.pop();
+	}
+}
+
 void scoped_memory_manager::drop(ETN_ref etn)
 {
 	// TODO: enable only on debug mode
