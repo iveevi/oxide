@@ -86,6 +86,20 @@ struct ETN : auto_variant <_expr_tree_atom, _expr_tree_op> {
 	std::vector <Symbol> symbols() const;
 
 	ETN_ref &next();
+
+	template <typename F>
+	void forall_operands(F &&ftn) {
+		if (is <_expr_tree_atom> ())
+			return;
+
+		auto tree = as <_expr_tree_op> ();
+
+		ETN_ref head = tree.down;
+		while (head) {
+			ftn(head);
+			head = head->next();
+		}
+	}
 };
 
 struct Expression {

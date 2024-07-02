@@ -125,3 +125,11 @@ ETN_ref clone(const ETN_ref &ref)
 		return new ETN(ref->as <_expr_tree_atom> ());
 	}
 }
+
+ETN_ref clone_soft(const ETN_ref &ref)
+{
+	if (ref->is <_expr_tree_op> ())
+		return new ETN(ref->as <_expr_tree_op> ());
+
+	return new ETN(ref->as <_expr_tree_atom> ());
+}

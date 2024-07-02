@@ -33,15 +33,44 @@
 // axiom := $(a + b = c) => $(a = c - b)
 auto program = R"(
 commutativity := $(a + b = b + a);
-E := $(x + y + z);
-transform($(z * x + y), commutativity);
+E := $(x + y + z + w);
+transform(E, commutativity);
 )";
 
-Result _transform(const Expression &expr, const Statement &stmt)
-{
-	// TODO: check for transformations in lower trees
-	ExprTable_L1 table;
+// TODO: expression equality to account for commutativity
+// of ops if specified (e.g. via an axiom)
 
+void list_table(const ExprTable_L1 &table)
+{
+	fmt::println("L1 table:");
+
+	size_t M = table.table_size;
+	size_t N = table.vector_size;
+
+	double load = 0;
+	for (size_t i = 0; i < M; i++) {
+		for (size_t j = 0; j < N; j++) {
+			if (table.valid[i * N + j]) {
+				fmt::println("  {}", table.data[i][j]);
+				load++;
+			}
+		}
+	}
+
+	fmt::println("  load: {:03.2f}%", 100.0 * load/(M * N));
+}
+
+// TODO: modes as well; i.e. depth, exhaust, ...
+void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &stmt, push_marker &pm, int depth)
+{
+	// The original expression itself goes in here
+	table.push(expr, pm);
+
+	// For now there is nothing to do for atoms
+	if (expr.etn->is <_expr_tree_atom> ())
+		return;
+
+	// TODO: check for transformations in lower trees
 	fmt::println("transform: on {}", expr);
 
 	auto opt_sub_lhs = match(stmt.lhs, expr);
@@ -55,7 +84,7 @@ Result _transform(const Expression &expr, const Statement &stmt)
 		fmt::println("result: {}", subbed);
 		fmt::println("  hash = {}", quick_hash(subbed));
 
-		table.push(subbed.etn);
+		table.push(subbed, pm);
 	}
 
 	auto opt_sub_rhs = match(stmt.rhs, expr);
@@ -69,12 +98,60 @@ Result _transform(const Expression &expr, const Statement &stmt)
 		fmt::println("result: {}", subbed);
 		fmt::println("  hash = {}", quick_hash(subbed));
 
-		table.push(subbed.etn);
+		table.push(subbed, pm);
 	}
 
-	fmt::println("table size: {}", table.unique);
+	// Trying all children as well
+	// TODO: use the same table, create a mark stack, then clear it all
+	std::vector <push_marker> markers;
 
-	return Void();
+	expr.etn->forall_operands(
+		[&](const ETN_ref &child) {
+			fmt::println("  child node: {}", (void *) child);
+			push_marker pm;
+			// TODO: subsignature if small enough?
+			Expression cexpr { child, expr.signature };
+			_transform(table, cexpr, stmt, pm, std::max(depth - 1, -1));
+			fmt::println("  pm size: {}", pm.size());
+
+			for (size_t i : pm) {
+				fmt::println("  sub-exprs (@{}): {}", i, table.flat_at(i));
+			}
+
+			markers.push_back(pm);
+		}
+	);
+
+	// Run through all permutations
+	if (markers.size() != 2) {
+		fmt::println("subexpression transforms are only supported for binary ops");
+	} else {
+		// TODO: product function
+		for (size_t i : markers[0]) {
+			for (size_t j : markers[1]) {
+				fmt::println("i, j: {} {}", i, j);
+				const auto &exlhs = table.flat_at(i);
+				const auto &exrhs = table.flat_at(j);
+
+				auto lhs = clone(exlhs.etn);
+				auto rhs = clone(exrhs.etn);
+				auto top = clone_soft(expr.etn);
+
+				top->as <_expr_tree_op> ().down = lhs;
+				lhs->next() = rhs;
+
+				Expression combined { top, expr.signature };
+				table.push(combined, pm);
+				table.smm.drop(top);
+			}
+		}
+	}
+
+	// TODO: specialization for low operand counts
+
+	// Erase generated expressions
+	for (const auto &pm : markers)
+		table.clear(pm);
 }
 
 using Function = std::function <Result (const std::vector <Symbolic> &)>;
@@ -98,7 +175,14 @@ Result transform(const std::vector <Symbolic> &args)
 	auto expr = rv1.as <Expression> ();
 	auto stmt = rv2.as <Statement> ();
 
-	return _transform(expr, stmt);
+	ExprTable_L1 table;
+	push_marker pm;
+	_transform(table, expr, stmt, pm, -1);
+	fmt::println("# of expressions generated: {}", table.unique);
+
+	list_table(table);
+
+	return Void();
 }
 
 // Assigning general values to symbols

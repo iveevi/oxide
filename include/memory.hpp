@@ -28,3 +28,4 @@ struct scoped_memory_manager {
 
 // Explicit cloning
 ETN_ref clone(const ETN_ref &);
+ETN_ref clone_soft(const ETN_ref &);
