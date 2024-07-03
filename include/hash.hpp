@@ -153,3 +153,6 @@ using ExprTable_L1 = ExpressionTable <41, 4>;
 // TODO: msb index for page sized array of validity bits (uint64_t):
 // first check == 0xff..., otherwise we know there is a valid bit/slot
 // the use intrinsic
+
+// Displaying table contents and statistics
+void list_table(const ExprTable_L1 &);

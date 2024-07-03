@@ -182,6 +182,8 @@ ParseResult <Token> lex_special(const std::string &s, size_t pos)
 		if (pos < s.size() && s[pos] == '(')
 			return ParseResult <Token> ::ok(SymbolicBegin(), ++pos);
 		break;
+	case '@':
+		return ParseResult <Token> ::ok(At(), pos);
 	case ';':
 		return ParseResult <Token> ::ok(Semicolon(), pos);
 	case '(':

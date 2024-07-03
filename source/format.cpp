@@ -64,6 +64,10 @@ struct _fmt_token_dispatcher {
 		ref += "implies";
 	}
 
+	void operator()(At) {
+		ref += "at";
+	}
+
 	void operator()(Semicolon) {
 		ref += "semicolon";
 	}

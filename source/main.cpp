@@ -34,34 +34,13 @@
 auto program = R"(
 commutativity := $(a + b = b + a);
 E := $(x + y + z + w);
+
+@exhaustive;
 transform(E, commutativity);
 )";
 
-// TODO: expression equality to account for commutativity
-// of ops if specified (e.g. via an axiom)
-
-void list_table(const ExprTable_L1 &table)
-{
-	fmt::println("L1 table:");
-
-	size_t M = table.table_size;
-	size_t N = table.vector_size;
-
-	double load = 0;
-	for (size_t i = 0; i < M; i++) {
-		for (size_t j = 0; j < N; j++) {
-			if (table.valid[i * N + j]) {
-				fmt::println("  {}", table.data[i][j]);
-				load++;
-			}
-		}
-	}
-
-	fmt::println("  load: {:03.2f}%", 100.0 * load/(M * N));
-}
-
 // TODO: modes as well; i.e. depth, exhaust, ...
-void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &stmt, push_marker &pm, int depth)
+void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &stmt, push_marker &pm, bool exhaustive, int depth)
 {
 	push_marker novel;
 
@@ -71,8 +50,6 @@ void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &st
 	// For now there is nothing to do for atoms
 	if (expr.etn->is <_expr_tree_atom> ())
 		return;
-
-	fmt::println("transform: on {}", expr);
 
 	auto opt_sub_lhs = match(stmt.lhs, expr);
 	if (opt_sub_lhs) {
@@ -97,7 +74,7 @@ void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &st
 			// TODO: subsignature if small enough?
 			push_marker pm;
 			Expression cexpr { child, expr.signature };
-			_transform(table, cexpr, stmt, pm, std::max(depth - 1, -1));
+			_transform(table, cexpr, stmt, pm, exhaustive, std::max(depth - 1, -1));
 			markers.push_back(pm);
 		}
 	);
@@ -127,20 +104,13 @@ void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &st
 		}
 	}
 
-	// Exhaustive search on newly generated statements
-	fmt::println("# novel expressions: {}", novel.size());
-	for (size_t i : novel)
-		fmt::println("  {}", table.flat_at(i));
-
 	// If exhaustive, repeat the seach over novel expressions
-	if (true) {
+	if (exhaustive) {
 		for (size_t i : novel) {
 			Expression expr = table.flat_at(i);
-			_transform(table, expr, stmt, pm, depth);
+			_transform(table, expr, stmt, pm, exhaustive, depth);
 		}
 	}
-
-	fmt::println("# novel expressions after recursion: {}", novel.size());
 
 	// Record the novel expressions as well
 	pm.insert(pm.end(), novel.begin(), novel.end());
@@ -150,39 +120,57 @@ void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &st
 		table.clear(pm);
 }
 
-using Function = std::function <Result (const std::vector <Symbolic> &)>;
-
-// TODO: automatic overload && argc resolver
-Result transform(const std::vector <Symbolic> &args)
+template <size_t N, typename T, typename ... Args>
+auto_optional <std::tuple <T, Args...>>
+_overload(const std::vector <RValue> &args)
 {
-	if (args.size() != 2) {
-		fmt::println("transform expected two arguments");
-		return Error();
+	if (args.size() != 1 + N + sizeof...(Args))
+		return std::nullopt;
+
+	if constexpr (sizeof...(Args) == 0) {
+		return args[N].maybe_as <T> ()
+			.template translate <std::tuple <T>> ();
+	} else {
+		return args[N].maybe_as <T> ()
+			.attach(_overload <N + 1, Args...>, args);
+	}
+}
+
+// TODO: structure with some more metadata
+template <typename T, typename ... Args>
+auto_optional <std::tuple <T, Args...>>
+overload(const std::vector <RValue> &args)
+{
+	return _overload <0, T, Args...> (args);
+}
+
+using Options = std::unordered_map <Symbol, RValue>;
+using Function = std::function <Result (const std::vector <RValue> &, const Options &)>;
+
+Result transform(const std::vector <RValue> &args, const Options &options)
+{
+	if (auto expr_stmt = overload <Expression, Statement> (args)) {
+		auto [expr, stmt] = expr_stmt.value();
+
+		bool exhaustive = false;
+		// TODO: cmp
+		if (options.contains("exhaustive"))
+			exhaustive = true;
+
+		ExprTable_L1 table;
+		push_marker pm;
+		_transform(table, expr, stmt, pm, exhaustive, -1);
+		fmt::println("# of expressions generated: {}", table.unique);
+		list_table(table);
 	}
 
-	auto rv1 = args[0];
-	auto rv2 = args[1];
-
-	if (!rv1.is <Expression> () || !rv2.is <Statement> ()) {
-		fmt::println("transform expected (expr, stmt)");
-		return Error();
-	}
-
-	auto expr = rv1.as <Expression> ();
-	auto stmt = rv2.as <Statement> ();
-
-	ExprTable_L1 table;
-	push_marker pm;
-	_transform(table, expr, stmt, pm, -1);
-	fmt::println("# of expressions generated: {}", table.unique);
-
-	list_table(table);
-
-	return Void();
+	// TODO: pass error message to string
+	fmt::println("transform expected (expr, stmt)");
+	return Error();
 }
 
 // Assigning general values to symbols
-using SymbolTable = std::unordered_map <Symbol, Symbolic>;
+using SymbolTable = std::unordered_map <Symbol, RValue>;
 
 struct _assignment_dispatcher {
 	SymbolTable &table;
@@ -244,7 +232,9 @@ struct Oxidius {
 
 	SymbolTable table;
 
-	auto_optional <Symbolic> resolve_rvalue(const RValue &rv) {
+	Options options;
+
+	auto_optional <RValue> resolve_rvalue(const RValue &rv) {
 		if (rv.is <Symbol> ()) {
 			Symbol sym = rv.as <Symbol> ();
 			if (!table.contains(sym)) {
@@ -255,7 +245,7 @@ struct Oxidius {
 			return table[sym];
 		}
 
-		return rv.translate(Symbolic());
+		return rv;
 	}
 
 	Result operator()(const DefineSymbol &ds) {
@@ -271,11 +261,8 @@ struct Oxidius {
 			return Error();
 		}
 
-		std::vector <Symbolic> resolved;
-
-		fmt::println("call with {}", call.ftn);
+		std::vector <RValue> resolved;
 		for (auto &rv : call.args) {
-			fmt::println("  arg: {}", rv);
 			auto rrv = resolve_rvalue(rv);
 			if (!rrv)
 				return Error();
@@ -283,11 +270,20 @@ struct Oxidius {
 			resolved.push_back(rrv.value());
 		}
 
-		return functions[call.ftn](resolved);
+		return functions[call.ftn](resolved, options)
+			.passthrough([&]() {
+				options.clear();
+			});
+	}
+
+	Result operator()(const PushOption &option) {
+		fmt::println("option: {}", option.name);
+		options[option.name] = true;
+		return Void();
 	}
 
 	template <typename T>
-	requires std::is_constructible_v <DefineAxiom, T>
+	requires std::is_constructible_v <Action, T>
 	Result operator()(const T &) {
 		fmt::println("action is not yet implemented!");
 		return Error();

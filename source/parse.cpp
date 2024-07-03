@@ -1,3 +1,4 @@
+#include <fmt/core.h>
 #include <vector>
 #include <deque>
 #include <stack>
@@ -348,22 +349,24 @@ std::optional <Statement> Statement::from(const std::string &s)
 }
 
 // Parsing more general programs
-#define PEEK_AND_RETURN_ON_EMPTY_STREAM(v) \
-	auto t = next(false);              \
-	if (!t)                            \
-		return v;                  \
-	auto token = t.value();
+auto_optional <Token> TokenStreamParser::end_statement()
+{
+	auto end = next();
+	if (!end) {
+		fmt::println("every statement must end with a semicolon");
+		return std::nullopt;
+	}
 
-#define CONSUME_AND_RETURN_ON_EMPTY_STREAM(v) \
-	auto t = next();                      \
-	if (!t)                               \
-		return v;                     \
-	auto token = t.value();
+	if (!end->is <Semicolon> ()) {
+		fmt::println("unexpected {}, expected ';'", end.value());
+		return std::nullopt;
+	}
+
+	return end;
+}
 
 auto_optional <Expression> TokenStreamParser::parse_symbolic_expression(const RPE_vector &rpev)
 {
-	fmt::println("expression!");
-
 	// Now parse the signature
 	const auto fallback_signature = std::make_pair(Signature(), rpev.size());
 
@@ -381,8 +384,6 @@ auto_optional <Expression> TokenStreamParser::parse_symbolic_expression(const RP
 		return std::nullopt;
 	}
 
-	fmt::println("expression etn: {}", *etn);
-
 	// TODO: for signatures, make sure everything is in the set of symbols...
 	return Expression {
 		.etn = etn,
@@ -392,8 +393,6 @@ auto_optional <Expression> TokenStreamParser::parse_symbolic_expression(const RP
 
 auto_optional <Statement> TokenStreamParser::parse_symbolic_statement(const RPE_vector &lhs_rpev)
 {
-	fmt::println("statement!");
-
 	RPE_vector rhs_rpev = rpe_vector(stream, pos);
 	if (rhs_rpev.empty()) {
 		fmt::println("empty RPE vector (rhs)");
@@ -405,8 +404,6 @@ auto_optional <Statement> TokenStreamParser::parse_symbolic_statement(const RPE_
 
 	auto [sig, pos] = signature_from_tokens(stream, fallback_signature.second)
 		.value_or(fallback_signature);
-
-	fmt::println("stream size: {}/{}", pos, stream.size());
 
 	if (pos != stream.size()) {
 		fmt::println("failed to fully parse statement");
@@ -424,9 +421,6 @@ auto_optional <Statement> TokenStreamParser::parse_symbolic_statement(const RPE_
 		fmt::println("error in constructing ETN (rhs)");
 		return std::nullopt;
 	}
-
-	fmt::println("lhs etn: {}", *lhs);
-	fmt::println("rhs etn: {}", *rhs);
 
 	auto sl = default_signature(sig, *lhs);
 	auto sr = default_signature(sig, *rhs);
@@ -450,8 +444,6 @@ auto_optional <Symbolic> TokenStreamParser::parse_symbolic_scope()
 
 	size_t offset = rpev.size();
 	if (offset >= stream.size()) {
-		fmt::println("full listing, expression");
-
 		return TokenStreamParser(stream, offset + 1)
 			.parse_symbolic_expression(rpev)
 			.translate <Symbolic> ();
@@ -496,11 +488,8 @@ auto_optional <Symbolic> TokenStreamParser::parse_symbolic()
 		if (t.is <ParenthesisBegin> ())
 			count++;
 
-		if (t.is <GroupEnd> () && ((count--) == 0)) {
-			fmt::println("end is at {}", end);
+		if (t.is <GroupEnd> () && ((count--) == 0))
 			break;
-		}
-
 		end++;
 	}
 
@@ -509,13 +498,7 @@ auto_optional <Symbolic> TokenStreamParser::parse_symbolic()
 		return std::nullopt;
 	}
 
-	fmt::println("end of symbolic block is offset {}", end - pos);
-
 	Stream slice(stream.begin() + pos, stream.begin() + end);
-	for (auto t : slice)
-		fmt::print("{} ", t);
-	fmt::println("");
-
 	return TokenStreamParser(slice, 0)
 		.parse_symbolic_scope()
 		.inspect([&](auto) {
@@ -535,8 +518,6 @@ auto_optional <Symbol> TokenStreamParser::parse_symbol()
 
 		symbol += t->as <Symbol> ();
 	}
-
-	fmt::println("total symbol: {}", symbol);
 
 	backup();
 
@@ -602,46 +583,24 @@ auto_optional <TokenStreamParser::RValue_vec> TokenStreamParser::parse_args()
 	return args;
 }
 
-auto_optional <Action> TokenStreamParser::parse_statement()
+auto_optional <Action> TokenStreamParser::parse_statement_from_symbol(const Symbol &symbol)
 {
-	auto t = next(false);
-	if (!t)
-		return std::nullopt;
-
-	auto token = t.value();
-	if (!token.is <Symbol> ()) {
-		fmt::println("all statements must begin with a symbol");
-		return std::nullopt;
-	}
-
-	auto s = parse_symbol();
-	if (!s) {
-		fmt::println("fatal error...");
-	}
-
-	Symbol symbol = s.value();
-	fmt::println("symbol: {}", symbol);
-
 	// Either define or call
 	Action action;
 
-	t = next();
+	auto t = next();
 	if (!t) {
 		fmt::println("expected a defintion or a call");
 		return std::nullopt;
 	}
 
-	token = t.value();
+	auto token = t.value();
 	if (token.is <Define> ()) {
-		fmt::println("token after define: {}", stream[pos]);
 		auto value = parse_rvalue();
 		if (!value) {
 			fmt::println("failed to parse RValue");
 			return std::nullopt;
 		}
-
-		fmt::println("got value...");
-		fmt::println("next token is: {}", stream[pos]);
 
 		action = DefineSymbol {
 			.identifier = symbol,
@@ -658,36 +617,62 @@ auto_optional <Action> TokenStreamParser::parse_statement()
 			.ftn = symbol,
 			.args = opt_args.value()
 		};
-
-		fmt::println("# of args: {}", opt_args->size());
 	} else {
 		fmt::println("unexpected {}, expected a definition or a call", token);
 		return std::nullopt;
 	}
 
-	auto end = next();
-	if (!end) {
-		fmt::println("every statement must end with a semicolon");
+	return end_statement().transition(action);
+}
+
+auto_optional <Action> TokenStreamParser::parse_statement_from_at()
+{
+	// Assume that we were on @ to begin with
+	next();
+
+	// Need a symbol to begin with
+	auto s = parse_symbol();
+	if (!s) {
+		// fmt::println("expected option, got {} instead", ...);
 		return std::nullopt;
 	}
 
-	if (!end->is <Semicolon> ()) {
-		fmt::println("unexpected {}, expected ';'", end.value());
+	// TODO: optionally an argument list
+
+	// TODO: backstepping automatically and testing it
+	auto action = PushOption { s.value() };
+	return end_statement().transition(action);
+}
+
+auto_optional <Action> TokenStreamParser::parse_statement()
+{
+	auto t = next(false);
+	if (!t)
 		return std::nullopt;
+
+	auto token = t.value();
+	if (token.is <Symbol> ()) {
+		auto s = parse_symbol();
+		if (!s) {
+			fmt::println("fatal error...");
+			return std::nullopt;
+		}
+
+		return parse_statement_from_symbol(s.value());
 	}
 
-	return action;
+	if (token.is <At> ())
+		return parse_statement_from_at();
+
+	fmt::println("unexpected token {}", token);
+	return std::nullopt;
 }
 
 std::vector <Action> TokenStreamParser::parse()
 {
 	// TODO: sink for diagnostics
 	std::vector <Action> actions;
-
-	while (auto action = parse_statement()) {
-		fmt::println("loop {}/{}", pos, stream.size());
+	while (auto action = parse_statement())
 		actions.push_back(action.value());
-	}
-
 	return actions;
 }

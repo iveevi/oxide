@@ -3,9 +3,16 @@
 #include "formalism.hpp"
 #include "include/std.hpp"
 
-// Types of actions
-using RValue = auto_variant <Symbol, Expression, Statement>;
+// Basic values
+// TODO: tuple type
+using Truth = bool;
 
+using RValue = auto_variant <
+	Truth, Symbol,
+	Expression, Statement
+>;
+
+// Types of actions
 struct DefineSymbol {
 	std::string identifier;
 	RValue value;
@@ -20,8 +27,16 @@ struct Call {
 	std::vector <RValue> args;
 };
 
+struct PushOption {
+	Symbol name;
+	// TODO: args
+};
+
 // Arbitrary action (e.g. define... axiom... call...)
-using _action_base = auto_variant <DefineSymbol, DefineAxiom, Call>;
+using _action_base = auto_variant <
+	DefineSymbol, DefineAxiom,
+	Call, PushOption
+>;
 
 struct Action : _action_base {
 	using _action_base::_action_base;

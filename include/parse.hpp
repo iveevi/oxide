@@ -21,7 +21,7 @@ struct TokenStreamParser {
 	TokenStreamParser(Stream &s, size_t p)
 			: stream(s), pos(p) {}
 
-	std::optional <Token> next(bool move = true) {
+	auto_optional <Token> next(bool move = true) {
 		if (pos >= stream.size())
 			return std::nullopt;
 
@@ -39,6 +39,8 @@ struct TokenStreamParser {
 		return *this;
 	}
 
+	auto_optional <Token> end_statement();
+
 	auto_optional <Expression> parse_symbolic_expression(const std::vector <RPE> &);
 	auto_optional <Statement> parse_symbolic_statement(const std::vector <RPE> &);
 	auto_optional <Symbolic> parse_symbolic_scope();
@@ -49,6 +51,8 @@ struct TokenStreamParser {
 
 	auto_optional <RValue_vec> parse_args();
 
+	auto_optional <Action> parse_statement_from_symbol(const Symbol &);
+	auto_optional <Action> parse_statement_from_at();
 	auto_optional <Action> parse_statement();
 
 	auto_optional <Action> parse_action();
