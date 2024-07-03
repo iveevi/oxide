@@ -63,6 +63,8 @@ void list_table(const ExprTable_L1 &table)
 // TODO: modes as well; i.e. depth, exhaust, ...
 void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &stmt, push_marker &pm, int depth)
 {
+	push_marker novel;
+
 	// The original expression itself goes in here
 	table.push(expr, pm);
 
@@ -70,35 +72,20 @@ void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &st
 	if (expr.etn->is <_expr_tree_atom> ())
 		return;
 
-	// TODO: check for transformations in lower trees
 	fmt::println("transform: on {}", expr);
 
 	auto opt_sub_lhs = match(stmt.lhs, expr);
 	if (opt_sub_lhs) {
 		auto sub_lhs = opt_sub_lhs.value().drop(table.smm);
-		fmt::println("lhs sub:");
-		for (const auto &[s, e] : sub_lhs)
-			fmt::println("  {} -> {}", s, e);
-
 		auto subbed = sub_lhs.apply(stmt.rhs).drop(table.smm);
-		fmt::println("result: {}", subbed);
-		fmt::println("  hash = {}", quick_hash(subbed));
-
-		table.push(subbed, pm);
+		table.push(subbed, novel);
 	}
 
 	auto opt_sub_rhs = match(stmt.rhs, expr);
 	if (opt_sub_rhs) {
 		auto sub_rhs = opt_sub_rhs.value().drop(table.smm);
-		fmt::println("rhs sub:");
-		for (const auto &[s, e] : sub_rhs)
-			fmt::println("  {} -> {}", s, e);
-
 		auto subbed = sub_rhs.apply(stmt.lhs).drop(table.smm);
-		fmt::println("result: {}", subbed);
-		fmt::println("  hash = {}", quick_hash(subbed));
-
-		table.push(subbed, pm);
+		table.push(subbed, novel);
 	}
 
 	// Trying all children as well
@@ -107,29 +94,22 @@ void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &st
 
 	expr.etn->forall_operands(
 		[&](const ETN_ref &child) {
-			fmt::println("  child node: {}", (void *) child);
-			push_marker pm;
 			// TODO: subsignature if small enough?
+			push_marker pm;
 			Expression cexpr { child, expr.signature };
 			_transform(table, cexpr, stmt, pm, std::max(depth - 1, -1));
-			fmt::println("  pm size: {}", pm.size());
-
-			for (size_t i : pm) {
-				fmt::println("  sub-exprs (@{}): {}", i, table.flat_at(i));
-			}
-
 			markers.push_back(pm);
 		}
 	);
 
 	// Run through all permutations
+	// TODO: specialization for low operand counts
 	if (markers.size() != 2) {
 		fmt::println("subexpression transforms are only supported for binary ops");
 	} else {
 		// TODO: product function
 		for (size_t i : markers[0]) {
 			for (size_t j : markers[1]) {
-				fmt::println("i, j: {} {}", i, j);
 				const auto &exlhs = table.flat_at(i);
 				const auto &exrhs = table.flat_at(j);
 
@@ -141,13 +121,29 @@ void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &st
 				lhs->next() = rhs;
 
 				Expression combined { top, expr.signature };
-				table.push(combined, pm);
+				table.push(combined, novel);
 				table.smm.drop(top);
 			}
 		}
 	}
 
-	// TODO: specialization for low operand counts
+	// Exhaustive search on newly generated statements
+	fmt::println("# novel expressions: {}", novel.size());
+	for (size_t i : novel)
+		fmt::println("  {}", table.flat_at(i));
+
+	// If exhaustive, repeat the seach over novel expressions
+	if (true) {
+		for (size_t i : novel) {
+			Expression expr = table.flat_at(i);
+			_transform(table, expr, stmt, pm, depth);
+		}
+	}
+
+	fmt::println("# novel expressions after recursion: {}", novel.size());
+
+	// Record the novel expressions as well
+	pm.insert(pm.end(), novel.begin(), novel.end());
 
 	// Erase generated expressions
 	for (const auto &pm : markers)
