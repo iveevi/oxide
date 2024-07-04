@@ -31,17 +31,21 @@
 
 // axiom := $(a = b) => $(b = a)
 // axiom := $(a + b = c) => $(a = c - b)
+// TODO: # for comments
+
 auto program = R"(
 E := $(x + (y + z) + w);
+commutativity := $(a + (b + c) = (a + b) + c);
+@exhaustive; @depth(3);
+transform(E, commutativity);
 )";
-/*E := $(x + y + z + w);
-commutativity := $(a + b = b + a);
-@exhaustive;
-transform(E, commutativity);*/
 
 // TODO: modes as well; i.e. depth, exhaust, ...
 void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &stmt, push_marker &pm, bool exhaustive, int depth)
 {
+	if (depth == 0)
+		return;
+
 	push_marker novel;
 
 	// The original expression itself goes in here
@@ -51,16 +55,17 @@ void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &st
 	if (expr.etn->is <_expr_tree_atom> ())
 		return;
 
+	scoped_memory_manager smm;
 	auto opt_sub_lhs = match(stmt.lhs, expr);
 	if (opt_sub_lhs) {
-		auto sub_lhs = opt_sub_lhs.value().drop(table.smm);
+		auto sub_lhs = opt_sub_lhs.value().drop(smm);
 		auto subbed = sub_lhs.apply(stmt.rhs).drop(table.smm);
 		table.push(subbed, novel);
 	}
 
 	auto opt_sub_rhs = match(stmt.rhs, expr);
 	if (opt_sub_rhs) {
-		auto sub_rhs = opt_sub_rhs.value().drop(table.smm);
+		auto sub_rhs = opt_sub_rhs.value().drop(smm);
 		auto subbed = sub_rhs.apply(stmt.lhs).drop(table.smm);
 		table.push(subbed, novel);
 	}
@@ -152,14 +157,19 @@ Result transform(const std::vector <RValue> &args, const Options &options)
 	if (auto expr_stmt = overload <Expression, Statement> (args)) {
 		auto [expr, stmt] = expr_stmt.value();
 
+		// TODO: get_opt <type> (<key>).value_or(false);
 		bool exhaustive = false;
 		// TODO: cmp
 		if (options.contains("exhaustive"))
 			exhaustive = true;
 
+		int depth = -1;
+		if (options.contains("depth"))
+			depth = options.at("depth").as <Int> ();
+
 		ExprTable_L1 table;
 		push_marker pm;
-		_transform(table, expr, stmt, pm, exhaustive, -1);
+		_transform(table, expr, stmt, pm, exhaustive, depth);
 		fmt::println("# of expressions generated: {}", table.unique);
 		list_table(table);
 		return Void();
@@ -270,8 +280,8 @@ struct Oxidius {
 	}
 
 	Result operator()(const PushOption &option) {
-		fmt::println("option: {}", option.name);
-		options[option.name] = true;
+		fmt::println("option: {} -- {}", option.name, option.arg);
+		options[option.name] = option.arg;
 		return Void();
 	}
 

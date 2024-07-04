@@ -114,6 +114,7 @@ std::optional <Substitution> join(const Substitution &A, const Substitution &B)
 
 std::optional <Substitution> match(const ETN_ref &source, const ETN_ref &victim)
 {
+	scoped_memory_manager smm;
 	if (source->is <_expr_tree_op> ()) {
 		if (!victim->is <_expr_tree_op> ())
 			return std::nullopt;
@@ -132,16 +133,21 @@ std::optional <Substitution> match(const ETN_ref &source, const ETN_ref &victim)
 			ETN_ref source_head = tree_source.down;
 			ETN_ref victim_head = tree_victim.down;
 
+			std::vector <ETN_ref> freeze;
 			while (source_head && victim_head) {
 				auto opt_sub_child = match(source_head, victim_head);
-				if (!opt_sub_child)
+				if (!opt_sub_child) {
+					smm.drop(sub);
 					return std::nullopt;
+				}
 
 				auto sub_child = opt_sub_child.value();
 
 				auto joined = join(sub, sub_child);
-				if (!joined)
+				if (!joined) {
+					smm.drop(sub);
 					return std::nullopt;
+				}
 
 				sub = joined.value();
 
@@ -159,7 +165,6 @@ std::optional <Substitution> match(const ETN_ref &source, const ETN_ref &victim)
 		if (atom_source.is <Symbol> ()) {
 			Symbol s = atom_source.as <Symbol> ();
 
-			// TODO: clone
 			Expression matched {
 				clone(victim),
 				default_signature(*victim)

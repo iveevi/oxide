@@ -6,8 +6,10 @@
 #include <fmt/core.h>
 
 #include "include/format.hpp"
+#include "include/action.hpp"
 #include "include/formalism.hpp"
 #include "include/lex.hpp"
+#include "include/types.hpp"
 
 std::string format_as(const Domain &dom)
 {
@@ -266,6 +268,12 @@ std::string format_as(const RValue &rv)
 
 	if (rv.is <Symbol> ())
 		return rv.as <Symbol> ();
+
+	if (rv.is <Truth> ())
+		return fmt::format("{}", rv.as <Truth> ());
+
+	if (rv.is <Int> ())
+		return fmt::format("{}", rv.as <Int> ());
 
 	return "<?>";
 }

@@ -6,6 +6,7 @@
 #include "include/formalism.hpp"
 #include "include/lex.hpp"
 #include "include/std.hpp"
+#include "include/types.hpp"
 
 struct RPE;
 
@@ -47,6 +48,7 @@ struct TokenStreamParser {
 
 	auto_optional <Symbolic> parse_symbolic();
 	auto_optional <Symbol> parse_symbol();
+	auto_optional <Int> parse_int();
 	auto_optional <RValue> parse_rvalue();
 
 	auto_optional <RValue_vec> parse_args();

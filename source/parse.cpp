@@ -105,7 +105,11 @@ struct _rpe_vector_dispatcher {
 };
 
 // TODO: supply the domain specification for function lookups
-using RPE_vector = std::vector <RPE>;
+// using RPE_vector = std::vector <RPE>;
+struct RPE_vector {
+	std::vector <RPE> rpes;
+	size_t end;
+};
 
 RPE_vector rpe_vector(const std::vector <Token> &lexed, size_t pos = 0)
 {
@@ -121,6 +125,7 @@ RPE_vector rpe_vector(const std::vector <Token> &lexed, size_t pos = 0)
 	std::vector <RPE> finish;
 	std::stack <Operation> operators;
 
+	size_t read = 0;
 	std::deque <Token> tokens {
 		lexed.begin() + pos,
 		lexed.end()
@@ -131,12 +136,13 @@ RPE_vector rpe_vector(const std::vector <Token> &lexed, size_t pos = 0)
 		auto t = tokens.front();
 		tokens.pop_front();
 		std::visit(rvd, t);
+		read++;
 	}
 
 	while (operators.size() && operators.top() != none)
 		rvd(none);
 
-	return finish;
+	return { finish, pos + read };
 }
 
 std::optional <std::pair <Signature, int>> signature_from_tokens(const std::vector <Token> &tokens, size_t pos = 0)
@@ -286,7 +292,7 @@ std::optional <Expression> Expression::from(const std::string &s)
 {
 	auto tokens = lex(s);
 
-	RPE_vector rpev = rpe_vector(tokens, 0);
+	auto [rpev, offset] = rpe_vector(tokens, 0);
 	if (rpev.empty()) {
 		fmt::println("empty RPE vector");
 		return std::nullopt;
@@ -317,13 +323,12 @@ std::optional <Statement> Statement::from(const std::string &s)
 {
 	auto tokens = lex(s);
 
-	RPE_vector lhs_rpev = rpe_vector(tokens, 0);
+	auto [lhs_rpev, offset] = rpe_vector(tokens, 0);
 	if (lhs_rpev.empty()) {
 		fmt::println("empty RPE vector (lhs)");
 		return std::nullopt;
 	}
 
-	size_t offset = lhs_rpev.size();
 	if (offset >= tokens.size()) {
 		fmt::println("statement ended before = was parsed");
 		return std::nullopt;
@@ -335,7 +340,7 @@ std::optional <Statement> Statement::from(const std::string &s)
 		return std::nullopt;
 	}
 
-	RPE_vector rhs_rpev = rpe_vector(tokens, offset);
+	auto [rhs_rpev, _] = rpe_vector(tokens, offset);
 	if (rhs_rpev.empty()) {
 		fmt::println("empty RPE vector (rhs)");
 		return std::nullopt;
@@ -393,7 +398,7 @@ auto_optional <Token> TokenStreamParser::end_statement()
 	return end;
 }
 
-auto_optional <Expression> TokenStreamParser::parse_symbolic_expression(const RPE_vector &rpev)
+auto_optional <Expression> TokenStreamParser::parse_symbolic_expression(const std::vector <RPE> &rpev)
 {
 	// Now parse the signature
 	const auto fallback_signature = std::make_pair(Signature(), (int) rpev.size());
@@ -419,9 +424,9 @@ auto_optional <Expression> TokenStreamParser::parse_symbolic_expression(const RP
 	};
 }
 
-auto_optional <Statement> TokenStreamParser::parse_symbolic_statement(const RPE_vector &lhs_rpev)
+auto_optional <Statement> TokenStreamParser::parse_symbolic_statement(const std::vector <RPE> &lhs_rpev)
 {
-	RPE_vector rhs_rpev = rpe_vector(stream, pos);
+	auto [rhs_rpev, offset] = rpe_vector(stream, pos);
 	if (rhs_rpev.empty()) {
 		fmt::println("empty RPE vector (rhs)");
 		return std::nullopt;
@@ -464,25 +469,26 @@ auto_optional <Statement> TokenStreamParser::parse_symbolic_statement(const RPE_
 auto_optional <Symbolic> TokenStreamParser::parse_symbolic_scope()
 {
 	// At least one expression
-	RPE_vector rpev = rpe_vector(stream, 0);
+	auto [rpev, offset] = rpe_vector(stream, 0);
 	if (rpev.empty()) {
 		fmt::println("empty RPE vector (lhs)");
 		return std::nullopt;
 	}
 
-	size_t offset = rpev.size();
 	if (offset >= stream.size()) {
 		return TokenStreamParser(stream, offset + 1)
 			.parse_symbolic_expression(rpev)
 			.translate <Symbolic> ();
 	}
 
-	Token middle = stream[offset];
+	Token middle = stream[--offset];
 	if (middle.is <Equals> ()) {
 		return TokenStreamParser(stream, offset + 1)
 			.parse_symbolic_statement(rpev)
 			.translate <Symbolic> ();
 	}
+
+	fmt::println("middle is not equals! {}", middle);
 
 	return TokenStreamParser(*this)
 		.parse_symbolic_expression(rpev)
@@ -552,8 +558,26 @@ auto_optional <Symbol> TokenStreamParser::parse_symbol()
 	return symbol.size() ? auto_optional <Symbol> (symbol) : std::nullopt;
 }
 
+auto_optional <Int> TokenStreamParser::parse_int()
+{
+	auto t = next();
+	if (!t)
+		return std::nullopt;
+
+	auto token = t.value();
+	if (!token.is <Integer> ()) {
+		backup();
+		return std::nullopt;
+	}
+
+	return token.as <Integer> ().value;
+}
+
 auto_optional <RValue> TokenStreamParser::parse_rvalue()
 {
+	if (auto z = parse_int())
+		return z.translate <RValue> ();
+
 	if (auto sym = parse_symbol())
 		return sym.translate <RValue> ();
 
@@ -672,10 +696,37 @@ auto_optional <Action> TokenStreamParser::parse_statement_from_at()
 		return std::nullopt;
 	}
 
-	// TODO: optionally an argument list
+	// Option so far; defaults to boolean true
+	auto action = PushOption { s.value(), true };
+
+	// Optionally an argument list
+	auto t = next(true);
+	if (t && t->is <ParenthesisBegin> ()) {
+		fmt::println("parsing argument");
+		auto arg = parse_rvalue();
+		if (!arg)
+			fmt::println("expected an rvalue in option");
+
+		fmt::println("arg: {}", arg.value());
+
+		// TODO: if (auto error = expect_token(...)) return error;
+		auto end = next(true);
+		if (!end) {
+			fmt::println("expected ) to close argument to option");
+			return std::nullopt;
+		}
+
+		if (!end->is <GroupEnd> ()) {
+			fmt::println("unexpected {} to close argument to option, expected )", end.value());
+			return std::nullopt;
+		}
+
+		action.arg = arg.value();
+	} else {
+		backup();
+	}
 
 	// TODO: backstepping automatically and testing it
-	auto action = PushOption { s.value() };
 	return end_statement().transition(action);
 }
 

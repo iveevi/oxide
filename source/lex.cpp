@@ -37,7 +37,7 @@ ParseResult <Integer> lex_integer(const std::string &s, size_t pos)
 		return ParseResult <Integer> ::fail();
 	}
 
-	Integer::value_type value = 0;
+	Int value = 0;
 
 	char c;
 	while ((c = s[pos]) && std::isdigit(c)) {

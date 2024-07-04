@@ -8,8 +8,8 @@
 using Truth = bool;
 
 using _rvalue_base = auto_variant <
-	Truth, Symbol,
-	Expression, Statement
+	Truth, Int,
+	Symbol, Expression, Statement
 >;
 
 struct RValue : _rvalue_base {
@@ -33,7 +33,7 @@ struct Call {
 
 struct PushOption {
 	Symbol name;
-	// TODO: args
+	RValue arg;
 };
 
 // Arbitrary action (e.g. define... axiom... call...)

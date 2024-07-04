@@ -13,14 +13,15 @@ enum Domain {
 };
 
 // Wrapped types
+using Int = long long int;
+
 struct Integer {
-	using value_type = long long int;
 	static constexpr Domain signature = integer;
 
 	// TODO: fill in macro
-	value_type value;
-	Integer(value_type v = value_type()) : value(v) {}
-	operator value_type() { return value; }
+	Int value;
+	Integer(Int v = Int()) : value(v) {}
+	operator Int() { return value; }
 };
 
 struct Real {
