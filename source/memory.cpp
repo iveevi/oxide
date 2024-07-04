@@ -60,6 +60,15 @@ void scoped_memory_manager::drop(const Substitution &sub)
 		drop(expr.etn);
 }
 
+void scoped_memory_manager::drop(const RValue &rv)
+{
+	if (rv.is <Statement> ())
+		drop(rv.as <Statement> ());
+
+	if (rv.is <Expression> ())
+		drop(rv.as <Expression> ());
+}
+
 void scoped_memory_manager::clear()
 {
 	while (deferred.size()) {

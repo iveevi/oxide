@@ -7,10 +7,14 @@
 // TODO: tuple type
 using Truth = bool;
 
-using RValue = auto_variant <
+using _rvalue_base = auto_variant <
 	Truth, Symbol,
 	Expression, Statement
 >;
+
+struct RValue : _rvalue_base {
+	using _rvalue_base::_rvalue_base;
+};
 
 // Types of actions
 struct DefineSymbol {

@@ -6,6 +6,7 @@ struct ETN;
 struct Expression;
 struct Statement;
 struct Substitution;
+struct RValue;
 
 using ETN_ref = ETN *;
 
@@ -20,6 +21,7 @@ struct scoped_memory_manager {
 	void drop(const Expression &);
 	void drop(const Statement &);
 	void drop(const Substitution &);
+	void drop(const RValue &);
 
 	void clear();
 

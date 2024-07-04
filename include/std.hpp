@@ -65,11 +65,17 @@ struct auto_optional : std::optional <T> {
 	// optional <T> -> optional <T>
 	//
 	// If valid executes F
-	// TODO: refactor to passthrough
 	template <typename F>
-	auto inspect(F &&ftn) const {
+	auto if_valid(F &&ftn) const {
 		if (this->operator bool())
 			ftn(this->value());
+		return *this;
+	}
+
+	template <typename F>
+	auto if_null(F &&ftn) const {
+		if (!this->operator bool())
+			ftn();
 		return *this;
 	}
 

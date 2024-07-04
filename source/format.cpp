@@ -102,7 +102,7 @@ struct _fmt_token_dispatcher {
 	}
 
 	static constexpr const char *op_strs[] = {
-		"none", "+", "-", "*", "/"
+		"none", "+", "-", "*", "/", "(", ")"
 	};
 };
 

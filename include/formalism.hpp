@@ -14,7 +14,9 @@
 enum Operation {
 	none,
 	add, subtract,
-	multiply, divide
+	multiply, divide,
+	// special (ignore precedence)
+	pbegin, pend
 };
 
 enum Comparator {

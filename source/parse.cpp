@@ -7,6 +7,7 @@
 #include "include/format.hpp"
 #include "include/lex.hpp"
 #include "include/formalism.hpp"
+#include "include/memory.hpp"
 #include "include/std.hpp"
 #include "include/parse.hpp"
 #include "include/types.hpp"
@@ -46,13 +47,11 @@ struct _rpe_vector_dispatcher {
 	void operator()(const Operation &op) {
 		while (operators.size()) {
 			auto top = operators.top();
-			if (top <= op)
+			if (top <= op || top == pbegin || top == pend)
 				break;
 
 			operators.pop();
 			finish.push_back(top);
-
-			// fmt::println("popped operation: {}", (int) top);
 		}
 
 		operators.push(op);
@@ -68,6 +67,28 @@ struct _rpe_vector_dispatcher {
 
 	void operator()(const SignatureBegin &) {
 		tokens.clear();
+	}
+
+	void operator()(const ParenthesisBegin &) {
+		operators.push(pbegin);
+	}
+
+	void operator()(const GroupEnd &) {
+		while (operators.size()) {
+			auto top = operators.top();
+			if (top == pbegin)
+				break;
+
+			operators.pop();
+			finish.push_back(top);
+		}
+
+		if (!operators.size()) {
+			fmt::println("error parsing expression, no '(' found before");
+			return tokens.clear();
+		}
+
+		return operators.pop();
 	}
 
 	template <typename T>
@@ -88,6 +109,11 @@ using RPE_vector = std::vector <RPE>;
 
 RPE_vector rpe_vector(const std::vector <Token> &lexed, size_t pos = 0)
 {
+	fmt::print("lexed: ");
+	for (auto t : lexed)
+		fmt::print("{} ", t);
+	fmt::println("");
+
 	if (pos >= lexed.size())
 		return {};
 
@@ -113,9 +139,12 @@ RPE_vector rpe_vector(const std::vector <Token> &lexed, size_t pos = 0)
 	return finish;
 }
 
-std::optional <std::pair <Signature, size_t>> signature_from_tokens(const std::vector <Token> &tokens, size_t pos = 0)
+std::optional <std::pair <Signature, int>> signature_from_tokens(const std::vector <Token> &tokens, size_t pos = 0)
 {
 	Signature result;
+
+	auto null_state = std::nullopt;
+	auto fail_state = std::make_pair(result, -1);
 
 	auto safe_get = [&](bool inc = true) -> std::optional <Token> {
 		if (pos >= tokens.size())
@@ -128,7 +157,7 @@ std::optional <std::pair <Signature, size_t>> signature_from_tokens(const std::v
 
 	auto first = safe_get();
 	if (!first || !first->is <SignatureBegin> ()) {
-		return std::nullopt;
+		return null_state;
 	}
 
 	// TODO: easier error handling... (<clause>, <expected message>, <expected>)
@@ -140,7 +169,7 @@ std::optional <std::pair <Signature, size_t>> signature_from_tokens(const std::v
 				fmt::println("unexpected '{}' in signature, expected a symbol", symbol.value());
 			else
 				fmt::println("expected a symbol in signature");
-			return std::nullopt;
+			return fail_state;
 		}
 
 		auto in = safe_get();
@@ -149,16 +178,17 @@ std::optional <std::pair <Signature, size_t>> signature_from_tokens(const std::v
 				fmt::println("unexpected '{}' in signature, expected ':'", in.value());
 			else
 				fmt::println("expected ':' in signature");
-			return std::nullopt;
+			return fail_state;
 		}
 
 		auto domain = safe_get();
 		if (!domain || !domain->is <Symbol> ()) {
+			// TODO: helper function for generating messages
 			if (in)
 				fmt::println("unexpected '{}' in signature, expected a domain symbol", domain.value());
 			else
 				fmt::println("expected a domain symbol in signature");
-			return std::nullopt;
+			return fail_state;
 		}
 
 		std::string str = symbol->as <Symbol> ();
@@ -171,17 +201,16 @@ std::optional <std::pair <Signature, size_t>> signature_from_tokens(const std::v
 			dom = integer;
 		} else {
 			fmt::println("invalid domain symbol '{}'", dstr);
-			return std::nullopt;
+			return fail_state;
 		}
 
-		if (!add_signature(result, str, dom)) {
-			return std::nullopt;
-		}
+		if (!add_signature(result, str, dom))
+			return fail_state;
 
 		auto comma = safe_get(false);
 		if (!comma) {
 			fmt::println("expected ']' to close the signature");
-			return std::nullopt;
+			return fail_state;
 		}
 
 		if (!comma->is <Comma> ())
@@ -196,7 +225,7 @@ std::optional <std::pair <Signature, size_t>> signature_from_tokens(const std::v
 			fmt::println("unexpected '{}' in signature, expected ']' to close", end.value());
 		else
 			fmt::println("expected ']' to close the signature");
-		return std::nullopt;
+		return fail_state;
 	}
 
 	return std::make_pair(result, pos);
@@ -263,15 +292,14 @@ std::optional <Expression> Expression::from(const std::string &s)
 		return std::nullopt;
 	}
 
-	const auto fallback_signature = std::make_pair(Signature(), rpev.size());
+	const auto fallback_signature = std::make_pair(Signature(), (int) rpev.size());
 
 	auto [sig, pos] = signature_from_tokens(tokens, rpev.size())
 		.value_or(fallback_signature);
 
-	if (rpev.empty() || pos != tokens.size()) {
-		fmt::println("failed to fully parse expression");
+	// Indicates an error in parsing the signature
+	if (pos < 0)
 		return std::nullopt;
-	}
 
 	ETN_ref etn = rpes_to_etn(rpev);
 	if (!etn) {
@@ -319,7 +347,7 @@ std::optional <Statement> Statement::from(const std::string &s)
 	auto [sig, pos] = signature_from_tokens(tokens, fallback_signature.second)
 		.value_or(fallback_signature);
 
-	if (pos != tokens.size()) {
+	if (pos < 0) {
 		fmt::println("failed to fully parse statement");
 		return std::nullopt;
 	}
@@ -368,12 +396,12 @@ auto_optional <Token> TokenStreamParser::end_statement()
 auto_optional <Expression> TokenStreamParser::parse_symbolic_expression(const RPE_vector &rpev)
 {
 	// Now parse the signature
-	const auto fallback_signature = std::make_pair(Signature(), rpev.size());
+	const auto fallback_signature = std::make_pair(Signature(), (int) rpev.size());
 
 	auto [sig, pos] = signature_from_tokens(stream, rpev.size())
 		.value_or(fallback_signature);
 
-	if (rpev.empty() || pos != stream.size()) {
+	if (rpev.empty() || pos < 0) {
 		fmt::println("failed to fully parse expression");
 		return std::nullopt;
 	}
@@ -405,7 +433,7 @@ auto_optional <Statement> TokenStreamParser::parse_symbolic_statement(const RPE_
 	auto [sig, pos] = signature_from_tokens(stream, fallback_signature.second)
 		.value_or(fallback_signature);
 
-	if (pos != stream.size()) {
+	if (pos < 0) {
 		fmt::println("failed to fully parse statement");
 		return std::nullopt;
 	}
@@ -501,7 +529,7 @@ auto_optional <Symbolic> TokenStreamParser::parse_symbolic()
 	Stream slice(stream.begin() + pos, stream.begin() + end);
 	return TokenStreamParser(slice, 0)
 		.parse_symbolic_scope()
-		.inspect([&](auto) {
+		.if_valid([&](auto) {
 			pos = end + 1;
 		});
 }
@@ -606,6 +634,13 @@ auto_optional <Action> TokenStreamParser::parse_statement_from_symbol(const Symb
 			.identifier = symbol,
 			.value = value.value().translate(RValue())
 		};
+
+		return end_statement()
+			.transition(action)
+			.if_null([&]() {
+				scoped_memory_manager smm;
+				smm.drop(value.value());
+			});
 	} else if (token.is <ParenthesisBegin> ()) {
 		backup();
 
@@ -617,12 +652,12 @@ auto_optional <Action> TokenStreamParser::parse_statement_from_symbol(const Symb
 			.ftn = symbol,
 			.args = opt_args.value()
 		};
+
+		return end_statement().transition(action);
 	} else {
 		fmt::println("unexpected {}, expected a definition or a call", token);
 		return std::nullopt;
 	}
-
-	return end_statement().transition(action);
 }
 
 auto_optional <Action> TokenStreamParser::parse_statement_from_at()

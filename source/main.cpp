@@ -32,12 +32,12 @@
 // axiom := $(a = b) => $(b = a)
 // axiom := $(a + b = c) => $(a = c - b)
 auto program = R"(
-commutativity := $(a + b = b + a);
-E := $(x + y + z + w);
-
-@exhaustive;
-transform(E, commutativity);
+E := $(x + (y + z) + w);
 )";
+/*E := $(x + y + z + w);
+commutativity := $(a + b = b + a);
+@exhaustive;
+transform(E, commutativity);*/
 
 // TODO: modes as well; i.e. depth, exhaust, ...
 void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &stmt, push_marker &pm, bool exhaustive, int depth)
@@ -162,6 +162,7 @@ Result transform(const std::vector <RValue> &args, const Options &options)
 		_transform(table, expr, stmt, pm, exhaustive, -1);
 		fmt::println("# of expressions generated: {}", table.unique);
 		list_table(table);
+		return Void();
 	}
 
 	// TODO: pass error message to string
@@ -199,25 +200,17 @@ struct _drop_dispatcher {
 	scoped_memory_manager &smm;
 
 	void operator()(DefineSymbol &ds) {
-		drop_rvalue(ds.value);
+		smm.drop(ds.value);
 	}
 
 	void operator()(Call &call) {
 		for (auto &arg : call.args)
-			drop_rvalue(arg);
+			smm.drop(arg);
 	}
 
 	template <typename T>
 	void operator()(const T &) {
 		fmt::println("drop not implemented for this type...");
-	}
-
-	void drop_rvalue(RValue &rv) {
-		if (rv.is <Statement> ())
-			rv.as <Statement> ().drop(smm);
-
-		if (rv.is <Expression> ())
-			rv.as <Expression> ().drop(smm);
 	}
 };
 
