@@ -9,6 +9,7 @@
 #include "include/std.hpp"
 
 // Special tokens
+struct Space {};
 struct Equals {};
 struct Comma {};
 struct In {};
@@ -27,7 +28,6 @@ struct SignatureEnd {};
 
 // Keywords
 struct Axiom {};
-struct Cache {};
 
 using _token_base = auto_variant <
 	Truth, Integer, Real, Symbol,
@@ -35,9 +35,10 @@ using _token_base = auto_variant <
 	Define, Implies, At, Semicolon,
 	SymbolicBegin, ParenthesisBegin, GroupEnd,
 	SignatureBegin, SignatureEnd,
-	Axiom, Cache
+	Axiom, Space
 >;
 
+// TODO: line information... (l, c)
 struct Token : _token_base {
 	using _token_base::_token_base;
 };

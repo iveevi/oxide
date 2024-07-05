@@ -67,6 +67,19 @@ void scoped_memory_manager::drop(const Value &rv)
 
 	if (rv.is <Expression> ())
 		drop(rv.as <Expression> ());
+
+	if (rv.is <Tuple> ()) {
+		auto tuple = rv.as <Tuple> ();
+		for (auto v : tuple)
+			drop(v);
+	}
+
+	if (rv.is <Argument> ()) {
+		auto argument = rv.as <Argument> ();
+		drop(argument.predicates);
+		if (argument.result.is <Statement> ())
+			drop(argument.result.as <Statement> ());
+	}
 }
 
 void scoped_memory_manager::clear()

@@ -1,8 +1,13 @@
+# Define axiomatic rules
 commutativity := $(a + b = b + a)
 associativity := $(a + (b + c) = (a + b) + c)
 
+# Define expressions
 E := $(x + (y + z) + w)
-T := (E, E)
 
+# Define arguments with statements
+T := ($(a = b), $(b = c)) => $(a = c)
+
+# Apply transformations
 transform(E, commutativity)
 transform(E, associativity)

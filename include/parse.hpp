@@ -51,6 +51,7 @@ struct TokenStreamParser {
 	auto_optional <Integer> parse_int();
 	auto_optional <Truth> parse_truth();
 
+	auto_optional <Conclusion> parse_conclusion();
 	auto_optional <Value> parse_rvalue();
 
 	auto_optional <Tuple> parse_args();

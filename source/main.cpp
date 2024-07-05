@@ -146,6 +146,7 @@ using _symtable_base = std::unordered_map <Symbol, Value>;
 struct SymbolTable : _symtable_base {
 	using _symtable_base::_symtable_base;
 
+	// TODO: std::visit version
 	auto_optional <Value> resolve(const Value &v) {
 		if (v.is <Symbol> ()) {
 			Symbol sym = v.as <Symbol> ();
@@ -170,6 +171,39 @@ struct SymbolTable : _symtable_base {
 			}
 
 			return result;
+		}
+
+		if (v.is <Argument> ()) {
+			Argument argument = v.as <Argument> ();
+			auto predicates = resolve(argument.predicates);
+			if (!predicates)
+				return std::nullopt;
+
+			if (!predicates->is <Tuple> ()) {
+				// TODO: error reporting unit
+				// TODO: line, column(s) information for unresolved values;
+				// once resolved, tracking is no longer needed
+				fmt::println("predicates of an argument must be in a tuple");
+				return std::nullopt;
+			}
+
+			for (auto v : predicates.value().as <Tuple> ()) {
+				if (!v.is <Statement> ()) {
+					fmt::println("arguments can only be made with statements");
+					return std::nullopt;
+				}
+			}
+
+			auto result = resolve(argument.result.translate(Value()));
+			if (!result)
+				return std::nullopt;
+
+			if (!result->is <Statement> ()) {
+				fmt::println("arguments can only be made with statements");
+				return std::nullopt;
+			}
+
+			return Argument { predicates.value().as <Tuple> (), result.value().as <Statement> () };
 		}
 
 		return v;
@@ -202,16 +236,14 @@ static std::unordered_map <Symbol, Function> functions {
 // Context for any session
 struct Oxidius {
 	scoped_memory_manager smm;
-
 	SymbolTable table;
-
 	Options options;
-
 
 	Result operator()(const DefineSymbol &ds) {
 		auto value = table.resolve(ds.value);
 		if (!value)
 			return Error();
+		fmt::println("value: {}", value.value());
 		table[ds.identifier] = value.value();
 		return Void();
 	}

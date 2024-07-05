@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "include/lex.hpp"
+#include "include/action.hpp"
 #include "include/format.hpp"
 
 // Lexing compound
@@ -228,6 +229,30 @@ ParseResult <Token> lex_special(const std::string &s, size_t pos)
 	return ParseResult <Token> ::fail();
 }
 
+// Refining tokens; combining symbols outside symbolic blocks and removing spaces
+std::vector <Token> refine(const std::vector <Token> &tokens)
+{
+	std::vector <Token> result;
+
+	size_t i = 0;
+	while (i < tokens.size()) {
+		if (tokens[i].is <Space> ()) {
+			i++;
+		} else if (tokens[i].is <Symbol> ()) {
+			Symbol s;
+			while (tokens[i].is <Symbol> ())
+				s += tokens[i++].as <Symbol> ();
+
+			result.push_back(s);
+		} else {
+			result.push_back(tokens[i]);
+			i++;
+		}
+	}
+
+	return result;
+}
+
 // TODO: infer multiplication from consecutive symbols in shunting yards
 std::vector <Token> lex(const std::string &s)
 {
@@ -237,7 +262,13 @@ std::vector <Token> lex(const std::string &s)
 	while (pos < s.length()) {
 		char c = s[pos];
 		if (std::isspace(c)) {
-			pos++;
+			result.push_back(Space());
+			while (std::isspace(s[pos])) {
+				pos++;
+			}
+		} else if (c == '#') {
+			while (s[pos] != '\n')
+				pos++;
 		} else if (std::isdigit(c)) {
 			auto real_result = lex_real(s, pos);
 			assert(real_result);
@@ -271,6 +302,18 @@ std::vector <Token> lex(const std::string &s)
 			break;
 		}
 	}
+
+	// fmt::println("tokens:");
+	// for (auto t : result)
+	// 	fmt::print("{} ", t);
+	// fmt::println("");
+
+	result = refine(result);
+
+	// fmt::println("refined:");
+	// for (auto t : result)
+	// 	fmt::print("{} ", t);
+	// fmt::println("");
 
 	return result;
 }

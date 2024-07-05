@@ -522,22 +522,20 @@ auto_optional <Symbolic> TokenStreamParser::parse_symbolic()
 		});
 }
 
+// TODO: reduce the boilerplate
 auto_optional <Symbol> TokenStreamParser::parse_symbol()
 {
-	if (pos >= stream.size())
+	auto t = next();
+	if (!t)
 		return std::nullopt;
 
-	Symbol symbol;
-	while (auto t = next()) {
-		if (!t->is <Symbol> ())
-			break;
-
-		symbol += t->as <Symbol> ();
+	auto token = t.value();
+	if (!token.is <Symbol> ()) {
+		backup();
+		return std::nullopt;
 	}
 
-	backup();
-
-	return symbol.size() ? auto_optional <Symbol> (symbol) : std::nullopt;
+	return token.as <Symbol> ();
 }
 
 auto_optional <Real> TokenStreamParser::parse_real()
@@ -585,6 +583,23 @@ auto_optional <Truth> TokenStreamParser::parse_truth()
 	return token.as <Truth> ();
 }
 
+auto_optional <Conclusion> TokenStreamParser::parse_conclusion()
+{
+	if (auto sym = parse_symbol())
+		return sym.translate <Conclusion> ();
+
+	if (auto sym = parse_symbolic()) {
+		if (!sym->is <Statement> ())
+			return std::nullopt;
+
+		return sym.translate([](const auto &sym) -> Conclusion {
+			return sym.translate(Conclusion());
+		});
+	}
+
+	return std::nullopt;
+}
+
 auto_optional <Value> TokenStreamParser::parse_rvalue()
 {
 	if (auto z = parse_int())
@@ -605,8 +620,23 @@ auto_optional <Value> TokenStreamParser::parse_rvalue()
 		});
 	}
 
-	if (auto tuple = parse_args())
-		return tuple.translate <Value> ();
+	if (auto tuple = parse_args()) {
+		auto tv = tuple.translate <Value> ();
+
+		// Special case is a continuation
+		auto t = next(false);
+		if (t && t->is <Implies> ()) {
+			next();
+			if (auto conclusion = parse_conclusion()) {
+				return Argument { tuple.value(), conclusion.value() };
+			} else {
+				fmt::println("expected a conclusion after =>");
+				return std::nullopt;
+			}
+		}
+
+		return tv;
+	}
 
 	return std::nullopt;
 }

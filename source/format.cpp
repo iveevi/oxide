@@ -99,7 +99,11 @@ struct _fmt_token_dispatcher {
 	}
 
 	void operator()(Axiom) {
-		ref += "axiom";
+		ref += "<axiom>";
+	}
+
+	void operator()(Space) {
+		ref += "<space>";
 	}
 
 	template <typename T>
@@ -214,7 +218,7 @@ std::string format_as(const Signature &sig)
 	return "[" + result + "]";
 }
 
-std::string _etn_to_string(const ETN *etn)
+std::string _etn_to_string(const ETN *etn, bool first = true)
 {
 	std::string result;
 
@@ -225,17 +229,19 @@ std::string _etn_to_string(const ETN *etn)
 	} else {
 		auto tree = etn->as <_expr_tree_op> ();
 
-		// TODO: check if binary
-		result += "(";
+		// TODO: check if binary and if its a function, etc.
+		if (!first)
+			result += "(";
 
 		ETN *a = tree.down;
 		ETN *b = a->next();
 
-		result += _etn_to_string(a) + " ";
+		result += _etn_to_string(a, false) + " ";
 		ftd(tree.op);
-		result += " " + _etn_to_string(b);
+		result += " " + _etn_to_string(b, false);
 
-		result += ")";
+		if (!first)
+			result += ")";
 	}
 
 	return result;
@@ -243,15 +249,19 @@ std::string _etn_to_string(const ETN *etn)
 
 std::string format_as(const Expression &expr)
 {
-	return _etn_to_string(expr.etn) + " " + format_as(expr.signature);
+	// TODO: persisent options
+	// return _etn_to_string(expr.etn) + " " + format_as(expr.signature);
+	return _etn_to_string(expr.etn);
 }
 
 std::string format_as(const Statement &stmt)
 {
 	// TODO: assuming eq
+	// return _etn_to_string(stmt.lhs.etn)
+	// 	+ " = " + _etn_to_string(stmt.rhs.etn)
+	// 	+ " " + format_as(stmt.signature);
 	return _etn_to_string(stmt.lhs.etn)
-		+ " = " + _etn_to_string(stmt.rhs.etn)
-		+ " " + format_as(stmt.signature);
+		+ " = " + _etn_to_string(stmt.rhs.etn);
 }
 
 std::string format_as(const Value &v)
@@ -285,6 +295,17 @@ std::string format_as(const Value &v)
 		}
 
 		return "(" + result + ")";
+	}
+
+	if (v.is <Argument> ()) {
+		auto argument = v.as <Argument> ();
+		auto result = argument.result;
+		std::string rstring;
+		if (result.is <Symbol> ())
+			rstring = result.as <Symbol> ();
+		else
+			rstring = format_as(result.as <Statement> ());
+		return format_as(argument.predicates) + " => " + rstring;
 	}
 
 	return "?";

@@ -6,20 +6,30 @@
 // Value type
 struct Value;
 struct Tuple;
+struct Argument;
+
+using Conclusion = auto_variant <Symbol, Statement>;
 
 using _rvalue_base = auto_variant <
 	Truth, Integer, Real,
 	Symbol, Expression, Statement,
-	Tuple
+	Tuple, Argument
 >;
 
 struct Tuple : public std::vector <Value> {
 	using std::vector <Value> ::vector;
 };
 
+struct Argument {
+	Tuple predicates;
+	Conclusion result;
+};
+
 struct Value : _rvalue_base {
 	using _rvalue_base::_rvalue_base;
 };
+
+// TODO: unresolved value -> value
 
 // Types of actions
 struct DefineSymbol {
