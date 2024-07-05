@@ -254,25 +254,60 @@ std::string format_as(const Statement &stmt)
 		+ " " + format_as(stmt.signature);
 }
 
-std::string format_as(const RValue &rv)
+std::string format_as(const Value &v)
 {
-	if (rv.is <Expression> ())
-		return format_as(rv.as <Expression> ());
+	if (v.is <Expression> ())
+		return format_as(v.as <Expression> ());
 
-	if (rv.is <Statement> ())
-		return format_as(rv.as <Statement> ());
+	if (v.is <Statement> ())
+		return format_as(v.as <Statement> ());
 
-	if (rv.is <Symbol> ())
-		return rv.as <Symbol> ();
+	if (v.is <Symbol> ())
+		return v.as <Symbol> ();
 
-	if (rv.is <Truth> ())
-		return fmt::format("{}", rv.as <Truth> ());
+	if (v.is <Truth> ())
+		return fmt::format("{}", v.as <Truth> ());
 
-	if (rv.is <Integer> ())
-		return fmt::format("{}", rv.as <Integer> ());
+	if (v.is <Integer> ())
+		return fmt::format("{}", v.as <Integer> ());
 
-	if (rv.is <Real> ())
-		return fmt::format("{:.2f}", rv.as <Real> ());
+	if (v.is <Real> ())
+		return fmt::format("{:.2f}", v.as <Real> ());
+
+	if (v.is <Tuple> ()) {
+		auto tuple = v.as <Tuple> ();
+
+		std::string result;
+		for (size_t i = 0; i < tuple.size(); i++) {
+			result += format_as(tuple[i]);
+			if (i + 1 < tuple.size())
+				result += ", ";
+		}
+
+		return "(" + result + ")";
+	}
+
+	return "?";
+}
+
+// Type string
+const Symbol type_string(const Value &v)
+{
+	// TODO: table with # of types (auto_variant methods)
+	if (v.is <Expression> ())
+		return "<Expression>";
+	if (v.is <Statement> ())
+		return "<Statement>";
+	if (v.is <Symbol> ())
+		return "<Symbol>";
+	if (v.is <Truth> ())
+		return "<Truth>";
+	if (v.is <Integer> ())
+		return "<Integer>";
+	if (v.is <Real> ())
+		return "<Real>";
+	if (v.is <Tuple> ())
+		return "<Tuple>";
 
 	return "<?>";
 }

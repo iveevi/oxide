@@ -60,7 +60,7 @@ void scoped_memory_manager::drop(const Substitution &sub)
 		drop(expr.etn);
 }
 
-void scoped_memory_manager::drop(const RValue &rv)
+void scoped_memory_manager::drop(const Value &rv)
 {
 	if (rv.is <Statement> ())
 		drop(rv.as <Statement> ());

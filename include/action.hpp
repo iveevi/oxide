@@ -3,21 +3,28 @@
 #include "formalism.hpp"
 #include "include/std.hpp"
 
-// Basic values
-// TODO: tuple type
+// Value type
+struct Value;
+struct Tuple;
+
 using _rvalue_base = auto_variant <
 	Truth, Integer, Real,
-	Symbol, Expression, Statement
+	Symbol, Expression, Statement,
+	Tuple
 >;
 
-struct RValue : _rvalue_base {
+struct Tuple : public std::vector <Value> {
+	using std::vector <Value> ::vector;
+};
+
+struct Value : _rvalue_base {
 	using _rvalue_base::_rvalue_base;
 };
 
 // Types of actions
 struct DefineSymbol {
 	std::string identifier;
-	RValue value;
+	Value value;
 };
 
 struct DefineAxiom {
@@ -26,12 +33,12 @@ struct DefineAxiom {
 
 struct Call {
 	Symbol ftn;
-	std::vector <RValue> args;
+	std::vector <Value> args;
 };
 
 struct PushOption {
 	Symbol name;
-	RValue arg;
+	Value arg;
 };
 
 // Arbitrary action (e.g. define... axiom... call...)
@@ -46,12 +53,10 @@ struct Action : _action_base {
 
 // Result of functions
 struct Void {};
-
-// TODO: tuple type
 struct Error {};
 
 using _result_base = auto_variant <
-	Void, RValue, Error
+	Void, Value, Error
 >;
 
 struct Result : _result_base {

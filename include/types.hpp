@@ -17,9 +17,3 @@ using Truth = bool;
 using Integer = long long int;
 using Real = long double;
 using Symbol = std::string;
-
-// Collecting all types under a concept
-template <typename T>
-concept domain_type = requires {
-	typename T::value_type;
-} && std::same_as <std::decay_t <decltype(T::signature)>, Domain>;

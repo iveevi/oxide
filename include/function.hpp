@@ -3,13 +3,13 @@
 #include "include/action.hpp"
 #include "include/format.hpp"
 
-using Options = std::unordered_map <Symbol, RValue>;
+using Options = std::unordered_map <Symbol, Value>;
 
-using Function = std::function <Result (const std::vector <RValue> &, const Options &)>;
+using Function = std::function <Result (const std::vector <Value> &, const Options &)>;
 
 template <size_t N, typename T, typename ... Args>
 auto_optional <std::tuple <T, Args...>>
-_overload(const std::vector <RValue> &args)
+_overload(const std::vector <Value> &args)
 {
 	if (args.size() != 1 + N + sizeof...(Args))
 		return std::nullopt;
@@ -26,7 +26,7 @@ _overload(const std::vector <RValue> &args)
 // TODO: structure with some more metadata
 template <typename T, typename ... Args>
 auto_optional <std::tuple <T, Args...>>
-overload(const std::vector <RValue> &args)
+overload(const std::vector <Value> &args)
 {
 	return _overload <0, T, Args...> (args);
 }

@@ -119,7 +119,7 @@ void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &st
 		table.clear(pm);
 }
 
-Result transform(const std::vector <RValue> &args, const Options &options)
+Result transform(const std::vector <Value> &args, const Options &options)
 {
 	if (auto expr_stmt = overload <Expression, Statement> (args)) {
 		auto [expr, stmt] = expr_stmt.value();
@@ -141,28 +141,38 @@ Result transform(const std::vector <RValue> &args, const Options &options)
 }
 
 // Assigning general values to symbols
-using SymbolTable = std::unordered_map <Symbol, RValue>;
+using _symtable_base = std::unordered_map <Symbol, Value>;
 
-struct _assignment_dispatcher {
-	SymbolTable &table;
-	const Symbol &symbol;
+struct SymbolTable : _symtable_base {
+	using _symtable_base::_symtable_base;
 
-	Result operator()(const Statement &stmt) {
-		// TODO: error on existing (immutable)
-		table[symbol] = stmt;
-		return Void();
-	}
+	auto_optional <Value> resolve(const Value &v) {
+		if (v.is <Symbol> ()) {
+			Symbol sym = v.as <Symbol> ();
+			if (!contains(sym)) {
+				fmt::println("symbol {} not defined", sym);
+				return std::nullopt;
+			}
 
-	Result operator()(const Expression &expr) {
-		table[symbol] = expr;
-		return Void();
-	}
+			return this->operator[](sym);
+		}
 
-	template <typename T>
-	Result operator()(const T &) {
-		// TODO: way to print r-value types...
-		fmt::println("cannot assign type ??");
-		return Error();
+		if (v.is <Tuple> ()) {
+			Tuple tuple = v.as <Tuple> ();
+
+			Tuple result;
+			for (size_t i = 0; i < tuple.size(); i++) {
+				auto r = resolve(tuple[i]);
+				if (!r)
+					return std::nullopt;
+
+				result.push_back(r.value());
+			}
+
+			return result;
+		}
+
+		return v;
 	}
 };
 
@@ -197,25 +207,14 @@ struct Oxidius {
 
 	Options options;
 
-	auto_optional <RValue> resolve_rvalue(const RValue &rv) {
-		if (rv.is <Symbol> ()) {
-			Symbol sym = rv.as <Symbol> ();
-			if (!table.contains(sym)) {
-				fmt::println("symbol {} not defined", sym);
-				return std::nullopt;
-			}
-
-			return table[sym];
-		}
-
-		return rv;
-	}
 
 	Result operator()(const DefineSymbol &ds) {
 		fmt::println("assigned {} -> {}", ds.identifier, ds.value);
-		_assignment_dispatcher ad(table, ds.identifier);
-		auto value = resolve_rvalue(ds.value);
-		return value ? std::visit(ad, value.value()) : Error();
+		auto value = table.resolve(ds.value);
+		if (!value)
+			return Error();
+		table[ds.identifier] = value.value();
+		return Void();
 	}
 
 	Result operator()(const Call &call) {
@@ -224,9 +223,9 @@ struct Oxidius {
 			return Error();
 		}
 
-		std::vector <RValue> resolved;
+		std::vector <Value> resolved;
 		for (auto &rv : call.args) {
-			auto rrv = resolve_rvalue(rv);
+			auto rrv = table.resolve(rv);
 			if (!rrv)
 				return Error();
 

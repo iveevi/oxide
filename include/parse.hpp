@@ -12,7 +12,7 @@ struct RPE;
 
 struct TokenStreamParser {
 	using Stream = std::vector <Token>;
-	using RValue_vec = std::vector <RValue>;
+	using Value_vec = std::vector <Value>;
 
 	Stream &stream;
 	size_t pos;
@@ -50,9 +50,9 @@ struct TokenStreamParser {
 	auto_optional <Integer> parse_int();
 	auto_optional <Truth> parse_truth();
 
-	auto_optional <RValue> parse_rvalue();
+	auto_optional <Value> parse_rvalue();
 
-	auto_optional <RValue_vec> parse_args();
+	auto_optional <Tuple> parse_args();
 
 	auto_optional <Action> parse_statement_from_symbol(const Symbol &);
 	auto_optional <Action> parse_statement_from_at();

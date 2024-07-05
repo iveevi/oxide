@@ -19,8 +19,7 @@ include_directories(.)
 target_compile_options(oxidius PRIVATE
 	-Wall
 	-fno-rtti
-	-fsanitize=address
-	-fconcepts-diagnostics-depth=2)
+	-fsanitize=address)
 
 target_link_libraries(oxidius PRIVATE fmt
 	-fsanitize=address)

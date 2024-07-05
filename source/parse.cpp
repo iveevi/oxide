@@ -492,13 +492,14 @@ auto_optional <Symbolic> TokenStreamParser::parse_symbolic_scope()
 
 auto_optional <Symbolic> TokenStreamParser::parse_symbolic()
 {
+	size_t og = pos;
 	auto t = next();
 	if (!t)
 		return std::nullopt;
 
 	auto token = t.value();
 	if (!token.is <SymbolicBegin> ()) {
-		fmt::println("no symbolic begin");
+		pos = og;
 		return std::nullopt;
 	}
 
@@ -511,6 +512,7 @@ auto_optional <Symbolic> TokenStreamParser::parse_symbolic()
 
 		if (t.is <SymbolicBegin> ()) {
 			fmt::println("cannot nested $(...) expressions!");
+			pos = og;
 			return std::nullopt;
 		}
 
@@ -524,6 +526,7 @@ auto_optional <Symbolic> TokenStreamParser::parse_symbolic()
 
 	if (!stream[end].is <GroupEnd> ()) {
 		fmt::println("unclosed $(...) expression");
+		pos = og;
 		return std::nullopt;
 	}
 
@@ -598,42 +601,50 @@ auto_optional <Truth> TokenStreamParser::parse_truth()
 	return token.as <Truth> ();
 }
 
-auto_optional <RValue> TokenStreamParser::parse_rvalue()
+auto_optional <Value> TokenStreamParser::parse_rvalue()
 {
 	if (auto z = parse_int())
-		return z.translate <RValue> ();
+		return z.translate <Value> ();
 
 	if (auto r = parse_real())
-		return r.translate <RValue> ();
+		return r.translate <Value> ();
 
 	if (auto t = parse_truth())
-		return t.translate <Truth> ();
+		return t.translate <Value> ();
 
 	if (auto sym = parse_symbol())
-		return sym.translate <RValue> ();
+		return sym.translate <Value> ();
 
 	if (auto sym = parse_symbolic()) {
-		return sym.translate([](const auto &sym) -> RValue {
-			return sym.translate(RValue());
+		return sym.translate([](const auto &sym) -> Value {
+			return sym.translate(Value());
 		});
 	}
+
+	if (auto tuple = parse_args())
+		return tuple.translate <Value> ();
 
 	return std::nullopt;
 }
 
-auto_optional <TokenStreamParser::RValue_vec> TokenStreamParser::parse_args()
+auto_optional <Tuple> TokenStreamParser::parse_args()
 {
 	// TODO: reset structure, returns nullopt and records original position
+	// tracker(pos: int &).success(T) -> T
 
 	auto t = next();
-	if (!t)
+	if (!t) {
+		fmt::println("end:()");
 		return {};
+	}
 
 	auto token = t.value();
-	if (!token.is <ParenthesisBegin> ())
+	if (!token.is <ParenthesisBegin> ()) {
+		fmt::println("not parenthesis... {} instead", token);
 		return std::nullopt;
+	}
 
-	RValue_vec args;
+	Tuple args;
 	while (true) {
 		auto opt_arg = parse_rvalue();
 		if (!opt_arg) {
@@ -687,7 +698,7 @@ auto_optional <Action> TokenStreamParser::parse_statement_from_symbol(const Symb
 
 		action = DefineSymbol {
 			.identifier = symbol,
-			.value = value.value().translate(RValue())
+			.value = value.value().translate(Value())
 		};
 
 		return end_statement()

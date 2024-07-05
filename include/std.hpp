@@ -12,7 +12,6 @@ constexpr bool is_tuple = false;
 template <typename T>
 constexpr bool is_auto_optional = false;
 
-
 template <typename T>
 struct auto_optional : std::optional <T> {
 	using std::optional <T> ::optional;
