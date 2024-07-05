@@ -37,7 +37,7 @@ ParseResult <Integer> lex_integer(const std::string &s, size_t pos)
 		return ParseResult <Integer> ::fail();
 	}
 
-	Int value = 0;
+	Integer value = 0;
 
 	char c;
 	while ((c = s[pos]) && std::isdigit(c)) {
@@ -56,7 +56,7 @@ ParseResult <Real, bool> lex_real(const std::string &s, size_t pos)
 		return ParseResult <Real, bool> ::fail();
 	}
 
-	Real::value_type value = 0;
+	Real value = 0;
 
 	char c;
 	while ((c = s[pos]) && std::isdigit(c)) {
@@ -72,10 +72,10 @@ ParseResult <Real, bool> lex_real(const std::string &s, size_t pos)
 		pos++;
 
 		int power = 1;
-		Real::value_type sub = 0;
+		Real sub = 0;
 
 		while ((c = s[pos]) && std::isdigit(c)) {
-			sub += Real::value_type(c - '0') * std::pow(10.0, -power);
+			sub += Real(c - '0') * std::pow(10.0, -power);
 			power++;
 			pos++;
 		}
@@ -86,27 +86,43 @@ ParseResult <Real, bool> lex_real(const std::string &s, size_t pos)
 	return ParseResult <Real, bool> ::ok(value, pos, decimal);
 }
 
-ParseResult <Operation> lex_operation(const std::string &s, size_t pos)
+ParseResult <Token> lex_operation(const std::string &s, size_t pos)
 {
 	char c = s[pos++];
 
 	// Single character operations
 	switch (c) {
 	case '+':
-		return ParseResult <Operation> ::ok(add, pos);
+		return ParseResult <Token> ::ok(add, pos);
 	case '-':
-		return ParseResult <Operation> ::ok(subtract, pos);
+		// Handle unary minus here, then we can forget about it elsewhere
+		if (auto real_result = lex_real(s, pos)) {
+			// Only return a real if there was a '.'
+			if (real_result.extra) {
+				return ParseResult <Token>
+					::ok(-1.0f * real_result.value,
+					real_result.next);
+			}
+		}
+
+		if (auto integer_result = lex_integer(s, pos)) {
+			return ParseResult <Token>
+				::ok(-1 * integer_result.value,
+				integer_result.next);
+		}
+
+		return ParseResult <Token> ::ok(subtract, pos);
 	case '*':
-		return ParseResult <Operation> ::ok(multiply, pos);
+		return ParseResult <Token> ::ok(multiply, pos);
 	case '/':
-		return ParseResult <Operation> ::ok(divide, pos);
+		return ParseResult <Token> ::ok(divide, pos);
 	default:
 		// Failed, go back
 		pos--;
 		break;
 	}
 
-	return ParseResult <Operation> ::fail();
+	return ParseResult <Token> ::fail();
 }
 
 template <typename T>
@@ -123,12 +139,23 @@ ParseResult <Token> lex_keyword(const std::string &s, size_t pos, const std::str
 	return ParseResult <Token> ::ok(T(), pos);
 }
 
+template <typename T, T value>
+ParseResult <Token> lex_keyword(const std::string &s, size_t pos, const std::string &kw)
+{
+	if (lex_keyword <T> (s, pos, kw))
+		return ParseResult <Token> ::ok(T(value), pos);
+
+	return ParseResult <Token> ::fail();
+}
+
 ParseResult <Token> lex_keyword(const std::string &s, size_t pos)
 {
-	using kw_lexer = decltype(&lex_keyword <Cache>);
+	using kw_lexer = decltype(&lex_keyword <void>);
 
 	static const std::unordered_map <std::string, kw_lexer> kw_lexers {
-		{ "axiom", &lex_keyword <Axiom> }
+		{ "axiom", &lex_keyword <Axiom> },
+		{ "true", &lex_keyword <Truth, true> },
+		{ "false", &lex_keyword <Truth, false> },
 	};
 
 	for (const auto &[kw, lexer] : kw_lexers) {
@@ -154,7 +181,7 @@ ParseResult <Symbol> lex_symbol(const std::string &s, size_t pos)
 		result += s[pos++];
 		result += s[pos++];
 
-		// TODO: check for braces
+		// TODO: check for braces, e.g. f_{new}
 	}
 
 	return ParseResult <Symbol> ::ok(result, pos);
@@ -201,7 +228,6 @@ ParseResult <Token> lex_special(const std::string &s, size_t pos)
 	return ParseResult <Token> ::fail();
 }
 
-// TODO: plus special tokens, e.g. parenthesis, equals, etc
 // TODO: infer multiplication from consecutive symbols in shunting yards
 std::vector <Token> lex(const std::string &s)
 {

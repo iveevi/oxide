@@ -17,9 +17,6 @@ struct Substitution : _substitution_base {
 	Substitution &drop(scoped_memory_manager &);
 };
 
-bool operator==(const Integer &, const Integer &);
-bool operator==(const Real &, const Real &);
-
 bool equal(const Atom &, const Atom &);
 bool equal(const ETN_ref &, const ETN_ref &);
 bool equal(const Expression &, const Expression &);

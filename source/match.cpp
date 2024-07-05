@@ -5,16 +5,6 @@
 #include "include/types.hpp"
 
 // Comparators
-bool operator==(const Integer &A, const Integer &B)
-{
-	return A.value == B.value;
-}
-
-bool operator==(const Real &A, const Real &B)
-{
-	return A.value == B.value;
-}
-
 bool equal(const Atom &A, const Atom &B)
 {
 	if (A.index() != B.index())

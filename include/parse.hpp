@@ -10,8 +10,6 @@
 
 struct RPE;
 
-// TODO: argument type for =>
-
 struct TokenStreamParser {
 	using Stream = std::vector <Token>;
 	using RValue_vec = std::vector <RValue>;
@@ -48,7 +46,10 @@ struct TokenStreamParser {
 
 	auto_optional <Symbolic> parse_symbolic();
 	auto_optional <Symbol> parse_symbol();
-	auto_optional <Int> parse_int();
+	auto_optional <Real> parse_real();
+	auto_optional <Integer> parse_int();
+	auto_optional <Truth> parse_truth();
+
 	auto_optional <RValue> parse_rvalue();
 
 	auto_optional <RValue_vec> parse_args();

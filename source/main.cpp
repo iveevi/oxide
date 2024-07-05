@@ -1,21 +1,23 @@
+#include <iostream>
+#include <type_traits>
 #include <functional>
 
 #include <fmt/printf.h>
 #include <fmt/std.h>
 #include <fmt/format.h>
 #include <fmt/core.h>
-#include <type_traits>
 
 #include "include/action.hpp"
 #include "include/formalism.hpp"
 #include "include/format.hpp"
+#include "include/function.hpp"
+#include "include/hash.hpp"
 #include "include/lex.hpp"
-#include "include/parse.hpp"
 #include "include/match.hpp"
 #include "include/memory.hpp"
+#include "include/parse.hpp"
 #include "include/std.hpp"
 #include "include/types.hpp"
-#include "include/hash.hpp"
 
 // TODO: scoring system to incentivize
 // generating f(x)=0 -> x=g(...) solutions
@@ -33,14 +35,6 @@
 // axiom := $(a + b = c) => $(a = c - b)
 // TODO: # for comments
 
-auto program = R"(
-E := $(x + (y + z) + w);
-commutativity := $(a + (b + c) = (a + b) + c);
-@exhaustive; @depth(3);
-transform(E, commutativity);
-)";
-
-// TODO: modes as well; i.e. depth, exhaust, ...
 void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &stmt, push_marker &pm, bool exhaustive, int depth)
 {
 	if (depth == 0)
@@ -125,47 +119,13 @@ void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &st
 		table.clear(pm);
 }
 
-template <size_t N, typename T, typename ... Args>
-auto_optional <std::tuple <T, Args...>>
-_overload(const std::vector <RValue> &args)
-{
-	if (args.size() != 1 + N + sizeof...(Args))
-		return std::nullopt;
-
-	if constexpr (sizeof...(Args) == 0) {
-		return args[N].maybe_as <T> ()
-			.template translate <std::tuple <T>> ();
-	} else {
-		return args[N].maybe_as <T> ()
-			.attach(_overload <N + 1, Args...>, args);
-	}
-}
-
-// TODO: structure with some more metadata
-template <typename T, typename ... Args>
-auto_optional <std::tuple <T, Args...>>
-overload(const std::vector <RValue> &args)
-{
-	return _overload <0, T, Args...> (args);
-}
-
-using Options = std::unordered_map <Symbol, RValue>;
-using Function = std::function <Result (const std::vector <RValue> &, const Options &)>;
-
 Result transform(const std::vector <RValue> &args, const Options &options)
 {
 	if (auto expr_stmt = overload <Expression, Statement> (args)) {
 		auto [expr, stmt] = expr_stmt.value();
 
-		// TODO: get_opt <type> (<key>).value_or(false);
-		bool exhaustive = false;
-		// TODO: cmp
-		if (options.contains("exhaustive"))
-			exhaustive = true;
-
-		int depth = -1;
-		if (options.contains("depth"))
-			depth = options.at("depth").as <Int> ();
+		Integer depth = check_option(options, "depth", (Integer) -1);
+		bool exhaustive = check_option(options, "exhaustive", true);
 
 		ExprTable_L1 table;
 		push_marker pm;
@@ -307,8 +267,23 @@ struct Oxidius {
 	}
 };
 
+inline const std::string readfile(const std::filesystem::path &path)
+{
+	std::ifstream f(path);
+	if (!f.good()) {
+		fmt::println("failed to find file: {}", path);
+		return "";
+	}
+
+	std::stringstream s;
+	s << f.rdbuf();
+	return s.str();
+}
+
 int main()
 {
+	static const std::filesystem::path program = "programs/experimental.oxide";
+
 	Oxidius context;
-	context.run(program);
+	context.run(readfile(program));
 }

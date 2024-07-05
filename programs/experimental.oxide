@@ -1,0 +1,7 @@
+commutativity := $(a + (b + c) = (a + b) + c);
+
+E := $(x + (y + z) + w);
+
+@exhaustive;
+@depth(-1);
+transform(E, commutativity);

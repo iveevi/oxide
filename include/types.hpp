@@ -12,27 +12,10 @@ enum Domain {
 	complex
 };
 
-// Wrapped types
-using Int = long long int;
-
-struct Integer {
-	static constexpr Domain signature = integer;
-
-	// TODO: fill in macro
-	Int value;
-	Integer(Int v = Int()) : value(v) {}
-	operator Int() { return value; }
-};
-
-struct Real {
-	using value_type = long double;
-	static constexpr Domain signature = real;
-
-	value_type value;
-	Real(value_type v = value_type()) : value(v) {}
-	operator value_type() { return value; }
-};
-
+// Basic types
+using Truth = bool;
+using Integer = long long int;
+using Real = long double;
 using Symbol = std::string;
 
 // Collecting all types under a concept

@@ -30,9 +30,9 @@ struct Axiom {};
 struct Cache {};
 
 using _token_base = auto_variant <
-	Integer, Real, Symbol,
-	Operation,
-	Equals, Comma, In, Define, Implies, At, Semicolon,
+	Truth, Integer, Real, Symbol,
+	Operation, Equals, Comma, In,
+	Define, Implies, At, Semicolon,
 	SymbolicBegin, ParenthesisBegin, GroupEnd,
 	SignatureBegin, SignatureEnd,
 	Axiom, Cache

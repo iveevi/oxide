@@ -113,11 +113,6 @@ struct RPE_vector {
 
 RPE_vector rpe_vector(const std::vector <Token> &lexed, size_t pos = 0)
 {
-	fmt::print("lexed: ");
-	for (auto t : lexed)
-		fmt::print("{} ", t);
-	fmt::println("");
-
 	if (pos >= lexed.size())
 		return {};
 
@@ -558,7 +553,22 @@ auto_optional <Symbol> TokenStreamParser::parse_symbol()
 	return symbol.size() ? auto_optional <Symbol> (symbol) : std::nullopt;
 }
 
-auto_optional <Int> TokenStreamParser::parse_int()
+auto_optional <Real> TokenStreamParser::parse_real()
+{
+	auto t = next();
+	if (!t)
+		return std::nullopt;
+
+	auto token = t.value();
+	if (!token.is <Real> ()) {
+		backup();
+		return std::nullopt;
+	}
+
+	return token.as <Real> ();
+}
+
+auto_optional <Integer> TokenStreamParser::parse_int()
 {
 	auto t = next();
 	if (!t)
@@ -570,13 +580,34 @@ auto_optional <Int> TokenStreamParser::parse_int()
 		return std::nullopt;
 	}
 
-	return token.as <Integer> ().value;
+	return token.as <Integer> ();
+}
+
+auto_optional <Truth> TokenStreamParser::parse_truth()
+{
+	auto t = next();
+	if (!t)
+		return std::nullopt;
+
+	auto token = t.value();
+	if (!token.is <Truth> ()) {
+		backup();
+		return std::nullopt;
+	}
+
+	return token.as <Truth> ();
 }
 
 auto_optional <RValue> TokenStreamParser::parse_rvalue()
 {
 	if (auto z = parse_int())
 		return z.translate <RValue> ();
+
+	if (auto r = parse_real())
+		return r.translate <RValue> ();
+
+	if (auto t = parse_truth())
+		return t.translate <Truth> ();
 
 	if (auto sym = parse_symbol())
 		return sym.translate <RValue> ();
@@ -702,12 +733,11 @@ auto_optional <Action> TokenStreamParser::parse_statement_from_at()
 	// Optionally an argument list
 	auto t = next(true);
 	if (t && t->is <ParenthesisBegin> ()) {
-		fmt::println("parsing argument");
 		auto arg = parse_rvalue();
-		if (!arg)
+		if (!arg) {
 			fmt::println("expected an rvalue in option");
-
-		fmt::println("arg: {}", arg.value());
+			return std::nullopt;
+		}
 
 		// TODO: if (auto error = expect_token(...)) return error;
 		auto end = next(true);

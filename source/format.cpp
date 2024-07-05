@@ -11,6 +11,10 @@
 #include "include/lex.hpp"
 #include "include/types.hpp"
 
+static constexpr const char *op_strs[] = {
+	"none", "+", "-", "*", "/", "(", ")"
+};
+
 std::string format_as(const Domain &dom)
 {
 	switch (dom) {
@@ -29,11 +33,11 @@ struct _fmt_token_dispatcher {
 	std::string &ref;
 
 	void operator()(Integer i) {
-		ref += fmt::format("I:{}", i.value);
+		ref += fmt::format("I:{}", i);
 	}
 
 	void operator()(Real r) {
-		ref += fmt::format("R:{}", r.value);
+		ref += fmt::format("R:{}", r);
 	}
 
 	void operator()(Symbol symbol) {
@@ -102,10 +106,6 @@ struct _fmt_token_dispatcher {
 	void operator()(T x) {
 		ref += "?";
 	}
-
-	static constexpr const char *op_strs[] = {
-		"none", "+", "-", "*", "/", "(", ")"
-	};
 };
 
 std::string format_as(const Atom &atom)
@@ -141,11 +141,11 @@ struct _fmt_atom_dispatcher {
 	std::string &ref;
 
 	void operator()(Integer i) {
-		ref += fmt::format("{}", i.value);
+		ref += fmt::format("{}", i);
 	}
 
 	void operator()(Real r) {
-		ref += fmt::format("{}", r.value);
+		ref += fmt::format("{}", r);
 	}
 
 	void operator()(Symbol symbol) {
@@ -160,10 +160,6 @@ struct _fmt_atom_dispatcher {
 	void operator()(T x) {
 		ref += "?";
 	}
-
-	static constexpr const char *op_strs[] = {
-		"none", "+", "-", "*", "/"
-	};
 };
 
 std::string format_as(const ETN &etn, int indent)
@@ -272,8 +268,11 @@ std::string format_as(const RValue &rv)
 	if (rv.is <Truth> ())
 		return fmt::format("{}", rv.as <Truth> ());
 
-	if (rv.is <Int> ())
-		return fmt::format("{}", rv.as <Int> ());
+	if (rv.is <Integer> ())
+		return fmt::format("{}", rv.as <Integer> ());
+
+	if (rv.is <Real> ())
+		return fmt::format("{:.2f}", rv.as <Real> ());
 
 	return "<?>";
 }

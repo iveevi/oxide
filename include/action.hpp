@@ -5,10 +5,8 @@
 
 // Basic values
 // TODO: tuple type
-using Truth = bool;
-
 using _rvalue_base = auto_variant <
-	Truth, Int,
+	Truth, Integer, Real,
 	Symbol, Expression, Statement
 >;
 
