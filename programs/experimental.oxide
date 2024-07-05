@@ -1,8 +1,8 @@
-commutativity := $(a + b = b + a);
-associativity := $(a + (b + c) = (a + b) + c);
+commutativity := $(a + b = b + a)
+associativity := $(a + (b + c) = (a + b) + c)
 
-E := $(x + (y + z) + w);
-T := (E, E);
+E := $(x + (y + z) + w)
+T := (E, E)
 
-transform(E, commutativity);
-transform(E, associativity);
+transform(E, commutativity)
+transform(E, associativity)

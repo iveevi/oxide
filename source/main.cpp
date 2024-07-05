@@ -209,7 +209,6 @@ struct Oxidius {
 
 
 	Result operator()(const DefineSymbol &ds) {
-		fmt::println("assigned {} -> {}", ds.identifier, ds.value);
 		auto value = table.resolve(ds.value);
 		if (!value)
 			return Error();
@@ -239,7 +238,6 @@ struct Oxidius {
 	}
 
 	Result operator()(const PushOption &option) {
-		fmt::println("option: {} -- {}", option.name, option.arg);
 		options[option.name] = option.arg;
 		return Void();
 	}

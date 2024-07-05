@@ -29,16 +29,17 @@ struct TokenStreamParser {
 		return stream[p];
 	}
 
-	auto backup() {
+	auto backup(bool force = false) {
 		// Do not go past the beginning,
-		// and preserve EOF state
+		// and preserve EOF state...
 		if (pos > 0 && pos < stream.size())
+			pos--;
+		// ...unless forced to
+		else if (force)
 			pos--;
 
 		return *this;
 	}
-
-	auto_optional <Token> end_statement();
 
 	auto_optional <Expression> parse_symbolic_expression(const std::vector <RPE> &);
 	auto_optional <Statement> parse_symbolic_statement(const std::vector <RPE> &);

@@ -377,22 +377,6 @@ std::optional <Statement> Statement::from(const std::string &s)
 }
 
 // Parsing more general programs
-auto_optional <Token> TokenStreamParser::end_statement()
-{
-	auto end = next();
-	if (!end) {
-		fmt::println("every statement must end with a semicolon");
-		return std::nullopt;
-	}
-
-	if (!end->is <Semicolon> ()) {
-		fmt::println("unexpected {}, expected ';'", end.value());
-		return std::nullopt;
-	}
-
-	return end;
-}
-
 auto_optional <Expression> TokenStreamParser::parse_symbolic_expression(const std::vector <RPE> &rpev)
 {
 	// Now parse the signature
@@ -633,16 +617,12 @@ auto_optional <Tuple> TokenStreamParser::parse_args()
 	// tracker(pos: int &).success(T) -> T
 
 	auto t = next();
-	if (!t) {
-		fmt::println("end:()");
+	if (!t)
 		return {};
-	}
 
 	auto token = t.value();
-	if (!token.is <ParenthesisBegin> ()) {
-		fmt::println("not parenthesis... {} instead", token);
+	if (!token.is <ParenthesisBegin> ())
 		return std::nullopt;
-	}
 
 	Tuple args;
 	while (true) {
@@ -660,7 +640,7 @@ auto_optional <Tuple> TokenStreamParser::parse_args()
 
 		auto opt_comma = next();
 		if (!opt_comma || !opt_comma->is <Comma> ()) {
-			backup();
+			backup(true);
 			break;
 		}
 	}
@@ -701,25 +681,22 @@ auto_optional <Action> TokenStreamParser::parse_statement_from_symbol(const Symb
 			.value = value.value().translate(Value())
 		};
 
-		return end_statement()
-			.transition(action)
-			.if_null([&]() {
-				scoped_memory_manager smm;
-				smm.drop(value.value());
-			});
+		return action;
 	} else if (token.is <ParenthesisBegin> ()) {
 		backup();
 
 		auto opt_args = parse_args();
-		if (!opt_args)
+		if (!opt_args) {
+			fmt::println("failed to parse args!");
 			return std::nullopt;
+		}
 
 		action = Call {
 			.ftn = symbol,
 			.args = opt_args.value()
 		};
 
-		return end_statement().transition(action);
+		return action;
 	} else {
 		fmt::println("unexpected {}, expected a definition or a call", token);
 		return std::nullopt;
@@ -768,7 +745,7 @@ auto_optional <Action> TokenStreamParser::parse_statement_from_at()
 	}
 
 	// TODO: backstepping automatically and testing it
-	return end_statement().transition(action);
+	return action;
 }
 
 auto_optional <Action> TokenStreamParser::parse_statement()
