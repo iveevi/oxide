@@ -10,13 +10,16 @@
 
 // Special tokens
 struct Space {};
-struct Equals {};
 struct Comma {};
 struct In {};
 struct Define {};
 struct Implies {};
 struct At {};
 struct Semicolon {};
+
+struct LiteralString : Symbol {
+	using Symbol::Symbol;
+};
 
 // Grouping
 struct SymbolicBegin {};
@@ -30,12 +33,12 @@ struct SignatureEnd {};
 struct Axiom {};
 
 using _token_base = auto_variant <
-	Truth, Integer, Real, Symbol,
-	Operation, Equals, Comma, In,
+	Axiom, Space, LiteralString,
+	Comparator, Operation, Comma, In,
 	Define, Implies, At, Semicolon,
-	SymbolicBegin, ParenthesisBegin, GroupEnd,
 	SignatureBegin, SignatureEnd,
-	Axiom, Space
+	SymbolicBegin, ParenthesisBegin, GroupEnd,
+	Truth, Integer, Real, Symbol
 >;
 
 // TODO: line information... (l, c)

@@ -58,9 +58,9 @@ struct _rpe_vector_dispatcher {
 	}
 
 	// End parsing expressions when encountering:
-	// - equals (-> statement)
+	// - cmp    (-> statement)
 	// - [      (-> signature)
-	void operator()(const Equals &) {
+	void operator()(const Comparator &) {
 		// Stop parsing, but leave output queue and operators intact
 		tokens.clear();
 	}
@@ -330,7 +330,7 @@ std::optional <Statement> Statement::from(const std::string &s)
 	}
 
 	Token middle = tokens[offset++];
-	if (!middle.is <Equals> ()) {
+	if (!middle.is <Comparator> ()) {
 		fmt::println("only supporting statements of equality (=)");
 		return std::nullopt;
 	}
@@ -371,41 +371,32 @@ std::optional <Statement> Statement::from(const std::string &s)
 	return Statement {
 		.lhs = Expression { lhs, sl },
 		.rhs = Expression { rhs, sr },
-		.cmp = eq,
+		.cmp = middle.as <Comparator> (),
 		.signature = join(sl, sr).value()
 	};
 }
 
-// Parsing more general programs
-auto_optional <Expression> TokenStreamParser::parse_symbolic_expression(const std::vector <RPE> &rpev)
+auto_optional <Symbolic> TokenStreamParser::parse_symbolic_scope()
 {
-	// Now parse the signature
-	const auto fallback_signature = std::make_pair(Signature(), (int) rpev.size());
-
-	auto [sig, pos] = signature_from_tokens(stream, rpev.size())
-		.value_or(fallback_signature);
-
-	if (rpev.empty() || pos < 0) {
-		fmt::println("failed to fully parse expression");
+	// At least one expression
+	auto [lhs_rpev, offset] = rpe_vector(stream, 0);
+	if (lhs_rpev.empty()) {
+		fmt::println("empty RPE vector (lhs)");
 		return std::nullopt;
 	}
 
-	ETN_ref etn = rpes_to_etn(rpev);
-	if (!etn) {
-		fmt::println("error in constructing ETN");
+	if (offset >= stream.size()) {
+		fmt::println("math blocks must define statements, not mere expressions");
 		return std::nullopt;
 	}
 
-	// TODO: for signatures, make sure everything is in the set of symbols...
-	return Expression {
-		.etn = etn,
-		.signature = default_signature(sig, *etn)
-	};
-}
+	Token middle = stream[--offset];
+	if (!middle.is <Comparator> ()) {
+		fmt::println("math blocks must define statements, not mere expressions");
+		return std::nullopt;
+	}
 
-auto_optional <Statement> TokenStreamParser::parse_symbolic_statement(const std::vector <RPE> &lhs_rpev)
-{
-	auto [rhs_rpev, offset] = rpe_vector(stream, pos);
+	auto [rhs_rpev, pos] = rpe_vector(stream, offset + 1);
 	if (rhs_rpev.empty()) {
 		fmt::println("empty RPE vector (rhs)");
 		return std::nullopt;
@@ -414,10 +405,10 @@ auto_optional <Statement> TokenStreamParser::parse_symbolic_statement(const std:
 	// Optionally a domain signature at the end
 	const auto fallback_signature = std::make_pair(Signature(), pos + rhs_rpev.size());
 
-	auto [sig, pos] = signature_from_tokens(stream, fallback_signature.second)
+	auto [sig, spos] = signature_from_tokens(stream, fallback_signature.second)
 		.value_or(fallback_signature);
 
-	if (pos < 0) {
+	if (spos < 0) {
 		fmt::println("failed to fully parse statement");
 		return std::nullopt;
 	}
@@ -440,38 +431,9 @@ auto_optional <Statement> TokenStreamParser::parse_symbolic_statement(const std:
 	return Statement {
 		.lhs = Expression { lhs, sl },
 		.rhs = Expression { rhs, sr },
-		.cmp = eq,
+		.cmp = Comparator { "=" },
 		.signature = join(sl, sr).value()
 	};
-}
-
-auto_optional <Symbolic> TokenStreamParser::parse_symbolic_scope()
-{
-	// At least one expression
-	auto [rpev, offset] = rpe_vector(stream, 0);
-	if (rpev.empty()) {
-		fmt::println("empty RPE vector (lhs)");
-		return std::nullopt;
-	}
-
-	if (offset >= stream.size()) {
-		return TokenStreamParser(stream, offset + 1)
-			.parse_symbolic_expression(rpev)
-			.translate <Symbolic> ();
-	}
-
-	Token middle = stream[--offset];
-	if (middle.is <Equals> ()) {
-		return TokenStreamParser(stream, offset + 1)
-			.parse_symbolic_statement(rpev)
-			.translate <Symbolic> ();
-	}
-
-	fmt::println("middle is not equals! {}", middle);
-
-	return TokenStreamParser(*this)
-		.parse_symbolic_expression(rpev)
-		.translate <Symbolic> ();
 }
 
 auto_optional <Symbolic> TokenStreamParser::parse_symbolic()
@@ -583,52 +545,55 @@ auto_optional <Truth> TokenStreamParser::parse_truth()
 	return token.as <Truth> ();
 }
 
-auto_optional <Conclusion> TokenStreamParser::parse_conclusion()
+auto_optional <UnresolvedConclusion> TokenStreamParser::parse_conclusion()
 {
 	if (auto sym = parse_symbol())
-		return sym.translate <Conclusion> ();
+		return sym.translate <UnresolvedConclusion> ();
 
 	if (auto sym = parse_symbolic()) {
 		if (!sym->is <Statement> ())
 			return std::nullopt;
 
-		return sym.translate([](const auto &sym) -> Conclusion {
-			return sym.translate(Conclusion());
+		return sym.translate([](const auto &sym) -> UnresolvedConclusion {
+			return sym.translate(UnresolvedConclusion());
 		});
 	}
 
 	return std::nullopt;
 }
 
-auto_optional <Value> TokenStreamParser::parse_rvalue()
+auto_optional <UnresolvedValue> TokenStreamParser::parse_rvalue()
 {
 	if (auto z = parse_int())
-		return z.translate <Value> ();
+		return z.translate <UnresolvedValue> ();
 
 	if (auto r = parse_real())
-		return r.translate <Value> ();
+		return r.translate <UnresolvedValue> ();
 
 	if (auto t = parse_truth())
-		return t.translate <Value> ();
+		return t.translate <UnresolvedValue> ();
 
 	if (auto sym = parse_symbol())
-		return sym.translate <Value> ();
+		return sym.translate <UnresolvedValue> ();
+
+	if (auto lit = parse_token <LiteralString> ())
+		return lit.translate <LiteralString> ();
 
 	if (auto sym = parse_symbolic()) {
-		return sym.translate([](const auto &sym) -> Value {
-			return sym.translate(Value());
+		return sym.translate([](const auto &sym) -> UnresolvedValue {
+			return sym.translate(UnresolvedValue());
 		});
 	}
 
 	if (auto tuple = parse_args()) {
-		auto tv = tuple.translate <Value> ();
+		auto tv = tuple.translate <UnresolvedValue> ();
 
 		// Special case is a continuation
 		auto t = next(false);
 		if (t && t->is <Implies> ()) {
 			next();
 			if (auto conclusion = parse_conclusion()) {
-				return Argument { tuple.value(), conclusion.value() };
+				return UnresolvedArgument { tuple.value(), conclusion.value() };
 			} else {
 				fmt::println("expected a conclusion after =>");
 				return std::nullopt;
@@ -641,7 +606,7 @@ auto_optional <Value> TokenStreamParser::parse_rvalue()
 	return std::nullopt;
 }
 
-auto_optional <Tuple> TokenStreamParser::parse_args()
+auto_optional <UnresolvedTuple> TokenStreamParser::parse_args()
 {
 	// TODO: reset structure, returns nullopt and records original position
 	// tracker(pos: int &).success(T) -> T
@@ -654,7 +619,7 @@ auto_optional <Tuple> TokenStreamParser::parse_args()
 	if (!token.is <ParenthesisBegin> ())
 		return std::nullopt;
 
-	Tuple args;
+	UnresolvedTuple args;
 	while (true) {
 		auto opt_arg = parse_rvalue();
 		if (!opt_arg) {
@@ -708,7 +673,7 @@ auto_optional <Action> TokenStreamParser::parse_statement_from_symbol(const Symb
 
 		action = DefineSymbol {
 			.identifier = symbol,
-			.value = value.value().translate(Value())
+			.value = value.value().translate(UnresolvedValue())
 		};
 
 		return action;
@@ -802,11 +767,11 @@ auto_optional <Action> TokenStreamParser::parse_statement()
 	return std::nullopt;
 }
 
-std::vector <Action> TokenStreamParser::parse()
-{
-	// TODO: sink for diagnostics
-	std::vector <Action> actions;
-	while (auto action = parse_statement())
-		actions.push_back(action.value());
-	return actions;
-}
+// std::vector <Action> TokenStreamParser::parse()
+// {
+// 	// TODO: sink for diagnostics
+// 	// std::vector <Action> actions;
+// 	// while (auto action = parse_statement())
+// 	// 	actions.push_back(action.value());
+// 	// return actions;
+// }

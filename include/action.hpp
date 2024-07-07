@@ -2,18 +2,56 @@
 
 #include "formalism.hpp"
 #include "include/std.hpp"
+#include "include/lex.hpp"
 
-// Value type
+// Value type; unresolved means that the value relies
+// on a symbol that has not yet been resolved
+
+// Unresolved types
+struct UnresolvedValue;
+struct UnresolvedTuple;
+struct UnresolvedArgument;
+
+using UnresolvedConclusion = auto_variant <Symbol, Statement>;
+
+using _unresolved_value_base = auto_variant <
+	// TODO: custom types?
+	Truth,
+	Integer,
+	Real,
+	Symbol,
+	Statement,
+	UnresolvedTuple,
+	UnresolvedArgument,
+	LiteralString
+>;
+
+struct UnresolvedTuple : public std::vector <UnresolvedValue> {
+	using std::vector <UnresolvedValue> ::vector;
+};
+
+struct UnresolvedArgument {
+	UnresolvedTuple predicates;
+	UnresolvedConclusion result;
+};
+
+struct UnresolvedValue : _unresolved_value_base {
+	using _unresolved_value_base::_unresolved_value_base;
+};
+
+// Fully resolved values
 struct Value;
 struct Tuple;
 struct Argument;
 
-using Conclusion = auto_variant <Symbol, Statement>;
-
-using _rvalue_base = auto_variant <
-	Truth, Integer, Real,
-	Symbol, Expression, Statement,
-	Tuple, Argument
+using _value_base = auto_variant <
+	Truth,
+	Integer,
+	Real,
+	Statement,
+	Tuple,
+	Argument,
+	LiteralString
 >;
 
 struct Tuple : public std::vector <Value> {
@@ -21,20 +59,18 @@ struct Tuple : public std::vector <Value> {
 };
 
 struct Argument {
-	Tuple predicates;
-	Conclusion result;
+	std::vector <Statement> predicates;
+	Statement result;
 };
 
-struct Value : _rvalue_base {
-	using _rvalue_base::_rvalue_base;
+struct Value : _value_base {
+	using _value_base::_value_base;
 };
-
-// TODO: unresolved value -> value
 
 // Types of actions
 struct DefineSymbol {
 	std::string identifier;
-	Value value;
+	UnresolvedValue value;
 };
 
 struct DefineAxiom {
@@ -43,12 +79,12 @@ struct DefineAxiom {
 
 struct Call {
 	Symbol ftn;
-	std::vector <Value> args;
+	std::vector <UnresolvedValue> args;
 };
 
 struct PushOption {
 	Symbol name;
-	Value arg;
+	UnresolvedValue arg;
 };
 
 // Arbitrary action (e.g. define... axiom... call...)
@@ -66,7 +102,7 @@ struct Void {};
 struct Error {};
 
 using _result_base = auto_variant <
-	Void, Value, Error
+	Void, UnresolvedValue, Error
 >;
 
 struct Result : _result_base {

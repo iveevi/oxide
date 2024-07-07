@@ -3,6 +3,7 @@
 
 #include "include/lex.hpp"
 #include "include/action.hpp"
+#include "include/formalism.hpp"
 #include "include/format.hpp"
 
 // Lexing compound
@@ -168,6 +169,40 @@ ParseResult <Token> lex_keyword(const std::string &s, size_t pos)
 	return ParseResult <Token> ::fail();
 }
 
+ParseResult <Comparator> lex_comparator(const std::string &s, size_t pos)
+{
+	// TODO: sort by length
+	// TODO: only activate inside math blocks..
+
+	auto list = Comparator::list;
+	auto cmp = [&](const Comparator &A, const Comparator &B) {
+		return A.s.size() > B.s.size();
+	};
+
+	// fmt::println("CMP SIZE: {}", list.size());
+
+	std::sort(list.begin(), list.end(), cmp);
+
+	for (auto cmp : list) {
+		// fmt::println("CMP: {}", cmp);
+		std::string c = cmp.s;
+
+		bool fail = false;
+		size_t p = pos;
+		for (size_t i = 0; i < c.size() && p < s.size(); i++, p++) {
+			if (c[i] != s[p]) {
+				fail = true;
+				break;
+			}
+		}
+
+		if (!fail)
+			return ParseResult <Comparator> ::ok(cmp, p);
+	}
+
+	return ParseResult <Comparator> ::fail();
+}
+
 ParseResult <Symbol> lex_symbol(const std::string &s, size_t pos)
 {
 	if (!std::isalpha(s[pos])) {
@@ -193,12 +228,13 @@ ParseResult <Token> lex_special(const std::string &s, size_t pos)
 	// Special single characters
 	char c = s[pos++];
 
+	LiteralString literal;
 	switch (c) {
 	case '=':
 		if (pos < s.size() && s[pos] == '>')
 			return ParseResult <Token> ::ok(Implies(), ++pos);
 
-		return ParseResult <Token> ::ok(Equals(), pos);
+		return ParseResult <Token> ::fail();
 	case ',':
 		return ParseResult <Token> ::ok(Comma(), pos);
 	case ':':
@@ -222,6 +258,16 @@ ParseResult <Token> lex_special(const std::string &s, size_t pos)
 		return ParseResult <Token> ::ok(SignatureBegin(), pos);
 	case ']':
 		return ParseResult <Token> ::ok(SignatureEnd(), pos);
+	case '"':
+		while (pos < s.size() && s[pos] != '"')
+			literal += s[pos++];
+
+		if (s[pos] != '"') {
+			fmt::println("unclosed string literal");
+			return ParseResult <Token> ::fail();
+		}
+
+		return ParseResult <Token> ::ok(literal, ++pos);
 	default:
 		break;
 	}
@@ -254,6 +300,7 @@ std::vector <Token> refine(const std::vector <Token> &tokens)
 }
 
 // TODO: infer multiplication from consecutive symbols in shunting yards
+// TODO: bool math block to check appropriately
 std::vector <Token> lex(const std::string &s)
 {
 	std::vector <Token> result;
@@ -269,6 +316,18 @@ std::vector <Token> lex(const std::string &s)
 		} else if (c == '#') {
 			while (s[pos] != '\n')
 				pos++;
+		} else if (auto op_result = lex_operation(s, pos)) {
+			result.push_back(op_result.value);
+			pos = op_result.next;
+		} else if (auto special_result = lex_special(s, pos)) {
+			result.push_back(special_result.value);
+			pos = special_result.next;
+		} else if (auto cmp_result = lex_comparator(s, pos)) {
+			result.push_back(cmp_result.value);
+			pos = cmp_result.next;
+		} else if (auto keyword_result = lex_keyword(s, pos)) {
+			result.push_back(keyword_result.value);
+			pos = keyword_result.next;
 		} else if (std::isdigit(c)) {
 			auto real_result = lex_real(s, pos);
 			assert(real_result);
@@ -282,21 +341,12 @@ std::vector <Token> lex(const std::string &s)
 				result.push_back(real_result.value);
 				pos = real_result.next;
 			}
-		} else if (auto keyword_result = lex_keyword(s, pos)) {
-			result.push_back(keyword_result.value);
-			pos = keyword_result.next;
 		} else if (std::isalpha(c)) {
 			auto symbol_result = lex_symbol(s, pos);
 			assert(symbol_result);
 
 			result.push_back(symbol_result.value);
 			pos = symbol_result.next;
-		} else if (auto op_result = lex_operation(s, pos)) {
-			result.push_back(op_result.value);
-			pos = op_result.next;
-		} else if (auto special_result = lex_special(s, pos)) {
-			result.push_back(special_result.value);
-			pos = special_result.next;
 		} else {
 			fprintf(stderr, "encountered unexpected character '%c'\n", c);
 			break;
@@ -310,10 +360,10 @@ std::vector <Token> lex(const std::string &s)
 
 	result = refine(result);
 
-	// fmt::println("refined:");
-	// for (auto t : result)
-	// 	fmt::print("{} ", t);
-	// fmt::println("");
+	fmt::println("refined:");
+	for (auto t : result)
+		fmt::print("{} ", t);
+	fmt::println("");
 
 	return result;
 }

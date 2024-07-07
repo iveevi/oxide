@@ -3,6 +3,9 @@
 #include "include/format.hpp"
 #include "include/formalism.hpp"
 
+// Standard comparators
+std::vector <Comparator> Comparator::list { { "=" } };
+
 // Signature
 bool add_signature(Signature &S, const std::string &sym, Domain dom)
 {

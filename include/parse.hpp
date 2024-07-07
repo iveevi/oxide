@@ -12,7 +12,7 @@ struct RPE;
 
 struct TokenStreamParser {
 	using Stream = std::vector <Token>;
-	using Value_vec = std::vector <Value>;
+	using Value_vec = std::vector <UnresolvedValue>;
 
 	Stream &stream;
 	size_t pos;
@@ -41,20 +41,32 @@ struct TokenStreamParser {
 		return *this;
 	}
 
-	auto_optional <Expression> parse_symbolic_expression(const std::vector <RPE> &);
-	auto_optional <Statement> parse_symbolic_statement(const std::vector <RPE> &);
-	auto_optional <Symbolic> parse_symbolic_scope();
+	template <typename T>
+	auto_optional <T> parse_token() {
+		auto t = next();
+		if (!t)
+			return std::nullopt;
 
+		auto token = t.value();
+		if (!token.is <T> ()) {
+			backup();
+			return std::nullopt;
+		}
+
+		return token.as <T> ();
+	}
+
+	auto_optional <Symbolic> parse_symbolic_scope();
 	auto_optional <Symbolic> parse_symbolic();
 	auto_optional <Symbol> parse_symbol();
 	auto_optional <Real> parse_real();
 	auto_optional <Integer> parse_int();
 	auto_optional <Truth> parse_truth();
 
-	auto_optional <Conclusion> parse_conclusion();
-	auto_optional <Value> parse_rvalue();
+	auto_optional <UnresolvedConclusion> parse_conclusion();
+	auto_optional <UnresolvedValue> parse_rvalue();
 
-	auto_optional <Tuple> parse_args();
+	auto_optional <UnresolvedTuple> parse_args();
 
 	auto_optional <Action> parse_statement_from_symbol(const Symbol &);
 	auto_optional <Action> parse_statement_from_at();

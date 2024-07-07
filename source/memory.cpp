@@ -60,22 +60,19 @@ void scoped_memory_manager::drop(const Substitution &sub)
 		drop(expr.etn);
 }
 
-void scoped_memory_manager::drop(const Value &rv)
+void scoped_memory_manager::drop(const UnresolvedValue &rv)
 {
 	if (rv.is <Statement> ())
 		drop(rv.as <Statement> ());
 
-	if (rv.is <Expression> ())
-		drop(rv.as <Expression> ());
-
-	if (rv.is <Tuple> ()) {
-		auto tuple = rv.as <Tuple> ();
+	if (rv.is <UnresolvedTuple> ()) {
+		auto tuple = rv.as <UnresolvedTuple> ();
 		for (auto v : tuple)
 			drop(v);
 	}
 
-	if (rv.is <Argument> ()) {
-		auto argument = rv.as <Argument> ();
+	if (rv.is <UnresolvedArgument> ()) {
+		auto argument = rv.as <UnresolvedArgument> ();
 		drop(argument.predicates);
 		if (argument.result.is <Statement> ())
 			drop(argument.result.as <Statement> ());

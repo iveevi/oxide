@@ -17,7 +17,8 @@ std::string format_as(const ETN &, int = 0);
 std::string format_as(const Signature &);
 std::string format_as(const Expression &);
 std::string format_as(const Statement &);
+std::string format_as(const UnresolvedValue &);
 std::string format_as(const Value &);
 
 // Type string generation
-const Symbol type_string(const Value &);
+const Symbol type_string(const UnresolvedValue &);

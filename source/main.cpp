@@ -119,24 +119,36 @@ void _transform(ExprTable_L1 &table, const Expression &expr, const Statement &st
 		table.clear(pm);
 }
 
-Result transform(const std::vector <Value> &args, const Options &options)
+// Result transform(const std::vector <Value> &args, const Options &options)
+// {
+// 	if (auto expr_stmt = overload <Expression, Statement> (args)) {
+// 		auto [expr, stmt] = expr_stmt.value();
+//
+// 		Integer depth = check_option(options, "depth", (Integer) -1);
+// 		bool exhaustive = check_option(options, "exhaustive", true);
+//
+// 		ExprTable_L1 table;
+// 		push_marker pm;
+// 		_transform(table, expr, stmt, pm, exhaustive, depth);
+// 		fmt::println("# of expressions generated: {}", table.unique);
+// 		list_table(table);
+// 		return Void();
+// 	}
+//
+// 	// TODO: pass error message to string
+// 	fmt::println("transform expected (expr, stmt)");
+// 	return Error();
+// }
+
+Result relation(const std::vector <Value> &args, const Options &)
 {
-	if (auto expr_stmt = overload <Expression, Statement> (args)) {
-		auto [expr, stmt] = expr_stmt.value();
-
-		Integer depth = check_option(options, "depth", (Integer) -1);
-		bool exhaustive = check_option(options, "exhaustive", true);
-
-		ExprTable_L1 table;
-		push_marker pm;
-		_transform(table, expr, stmt, pm, exhaustive, depth);
-		fmt::println("# of expressions generated: {}", table.unique);
-		list_table(table);
+	if (auto lit = overload <LiteralString> (args)) {
+		auto [lits] = lit.value();
+		Comparator::list.push_back(Comparator(lits));
 		return Void();
 	}
 
-	// TODO: pass error message to string
-	fmt::println("transform expected (expr, stmt)");
+	fmt::println("relation expected (lit)");
 	return Error();
 }
 
@@ -147,7 +159,7 @@ struct SymbolTable : _symtable_base {
 	using _symtable_base::_symtable_base;
 
 	// TODO: std::visit version
-	auto_optional <Value> resolve(const Value &v) {
+	auto_optional <Value> resolve(const UnresolvedValue &v) {
 		if (v.is <Symbol> ()) {
 			Symbol sym = v.as <Symbol> ();
 			if (!contains(sym)) {
@@ -158,8 +170,8 @@ struct SymbolTable : _symtable_base {
 			return this->operator[](sym);
 		}
 
-		if (v.is <Tuple> ()) {
-			Tuple tuple = v.as <Tuple> ();
+		if (v.is <UnresolvedTuple> ()) {
+			UnresolvedTuple tuple = v.as <UnresolvedTuple> ();
 
 			Tuple result;
 			for (size_t i = 0; i < tuple.size(); i++) {
@@ -173,8 +185,8 @@ struct SymbolTable : _symtable_base {
 			return result;
 		}
 
-		if (v.is <Argument> ()) {
-			Argument argument = v.as <Argument> ();
+		if (v.is <UnresolvedArgument> ()) {
+			UnresolvedArgument argument = v.as <UnresolvedArgument> ();
 			auto predicates = resolve(argument.predicates);
 			if (!predicates)
 				return std::nullopt;
@@ -187,14 +199,17 @@ struct SymbolTable : _symtable_base {
 				return std::nullopt;
 			}
 
+			std::vector <Statement> pstmts;
 			for (auto v : predicates.value().as <Tuple> ()) {
 				if (!v.is <Statement> ()) {
 					fmt::println("arguments can only be made with statements");
 					return std::nullopt;
 				}
+
+				pstmts.push_back(v.as <Statement> ());
 			}
 
-			auto result = resolve(argument.result.translate(Value()));
+			auto result = resolve(argument.result.translate(UnresolvedValue()));
 			if (!result)
 				return std::nullopt;
 
@@ -203,10 +218,13 @@ struct SymbolTable : _symtable_base {
 				return std::nullopt;
 			}
 
-			return Argument { predicates.value().as <Tuple> (), result.value().as <Statement> () };
+			return Argument {
+				pstmts,
+				result.value().as <Statement> ()
+			};
 		}
 
-		return v;
+		return v.translate(Value());
 	}
 };
 
@@ -230,7 +248,8 @@ struct _drop_dispatcher {
 
 // Set of functions
 static std::unordered_map <Symbol, Function> functions {
-	{ "transform", transform }
+	// { "transform", transform },
+	{ "relation", relation },
 };
 
 // Context for any session
@@ -270,7 +289,11 @@ struct Oxidius {
 	}
 
 	Result operator()(const PushOption &option) {
-		options[option.name] = option.arg;
+		auto rrv = table.resolve(option.arg);
+		if (!rrv)
+			return Error();
+
+		options[option.name] = rrv.value();
 		return Void();
 	}
 
@@ -283,13 +306,11 @@ struct Oxidius {
 
 	void run(const std::string &program) {
 		auto tokens = lex(program);
-		auto actions = TokenStreamParser(tokens, 0).parse();
 
-		// Memory management
-		for (auto &action : actions)
+		TokenStreamParser parser(tokens, 0);
+		while (auto opt_action = parser.parse_statement()) {
+			auto action = opt_action.value();
 			std::visit(_drop_dispatcher(smm), action);
-
-		for (auto action : actions) {
 			if (std::visit(*this, action).is <Error> ())
 				break;
 		}
@@ -311,7 +332,7 @@ inline const std::string readfile(const std::filesystem::path &path)
 
 int main()
 {
-	static const std::filesystem::path program = "programs/experimental.oxide";
+	static const std::filesystem::path program = "programs/experimental.ox";
 
 	Oxidius context;
 	context.run(readfile(program));

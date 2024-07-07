@@ -50,16 +50,12 @@ struct _fmt_token_dispatcher {
 		ref += op_strs[op];
 	}
 
-	void operator()(Equals) {
-		ref += "eq";
-	}
-
 	void operator()(Comma) {
-		ref += "comma";
+		ref += "<comma>";
 	}
 
 	void operator()(In) {
-		ref += "in";
+		ref += "<in>";
 	}
 
 	void operator()(Define) {
@@ -104,6 +100,14 @@ struct _fmt_token_dispatcher {
 
 	void operator()(Space) {
 		ref += "<space>";
+	}
+
+	void operator()(Comparator cmp) {
+		ref += "<cmp:'" + cmp.s + "'>";
+	}
+
+	void operator()(LiteralString literal) {
+		ref += "<lit:'" + literal + "'>";
 	}
 
 	template <typename T>
@@ -261,19 +265,64 @@ std::string format_as(const Statement &stmt)
 	// 	+ " = " + _etn_to_string(stmt.rhs.etn)
 	// 	+ " " + format_as(stmt.signature);
 	return _etn_to_string(stmt.lhs.etn)
-		+ " = " + _etn_to_string(stmt.rhs.etn);
+		+ " " + stmt.cmp.s + " "
+		+ _etn_to_string(stmt.rhs.etn);
 }
 
-std::string format_as(const Value &v)
+std::string format_as(const UnresolvedValue &v)
 {
-	if (v.is <Expression> ())
-		return format_as(v.as <Expression> ());
-
 	if (v.is <Statement> ())
 		return format_as(v.as <Statement> ());
 
 	if (v.is <Symbol> ())
 		return v.as <Symbol> ();
+
+	if (v.is <LiteralString> ())
+		return "\"" + v.as <LiteralString> () + "\"";
+
+	if (v.is <Truth> ())
+		return fmt::format("{}", v.as <Truth> ());
+
+	if (v.is <Integer> ())
+		return fmt::format("{}", v.as <Integer> ());
+
+	if (v.is <Real> ())
+		return fmt::format("{:.2f}", v.as <Real> ());
+
+	if (v.is <UnresolvedTuple> ()) {
+		auto tuple = v.as <UnresolvedTuple> ();
+
+		std::string result;
+		for (size_t i = 0; i < tuple.size(); i++) {
+			result += format_as(tuple[i]);
+			if (i + 1 < tuple.size())
+				result += ", ";
+		}
+
+		return "(" + result + ")";
+	}
+
+	if (v.is <UnresolvedArgument> ()) {
+		auto argument = v.as <UnresolvedArgument> ();
+		auto result = argument.result;
+		std::string rstring;
+		if (result.is <Symbol> ())
+			rstring = result.as <Symbol> ();
+		else
+			rstring = format_as(result.as <Statement> ());
+		return format_as(argument.predicates) + " => " + rstring;
+	}
+
+	return "?";
+}
+
+std::string format_as(const Value &v)
+{
+	if (v.is <Statement> ())
+		return format_as(v.as <Statement> ());
+
+	if (v.is <LiteralString> ())
+		return "\"" + v.as <LiteralString> () + "\"";
 
 	if (v.is <Truth> ())
 		return fmt::format("{}", v.as <Truth> ());
@@ -299,24 +348,26 @@ std::string format_as(const Value &v)
 
 	if (v.is <Argument> ()) {
 		auto argument = v.as <Argument> ();
+		auto predicates = argument.predicates;
 		auto result = argument.result;
+
 		std::string rstring;
-		if (result.is <Symbol> ())
-			rstring = result.as <Symbol> ();
-		else
-			rstring = format_as(result.as <Statement> ());
-		return format_as(argument.predicates) + " => " + rstring;
+		for (size_t i = 0; i < predicates.size(); i++) {
+			rstring += format_as(predicates[i]);
+			if (i + 1 < predicates.size())
+				rstring += ", ";
+		}
+
+		return "(" + rstring + ") => " + format_as(result);
 	}
 
 	return "?";
 }
 
 // Type string
-const Symbol type_string(const Value &v)
+const Symbol type_string(const UnresolvedValue &v)
 {
 	// TODO: table with # of types (auto_variant methods)
-	if (v.is <Expression> ())
-		return "<Expression>";
 	if (v.is <Statement> ())
 		return "<Statement>";
 	if (v.is <Symbol> ())
@@ -327,7 +378,7 @@ const Symbol type_string(const Value &v)
 		return "<Integer>";
 	if (v.is <Real> ())
 		return "<Real>";
-	if (v.is <Tuple> ())
+	if (v.is <UnresolvedTuple> ())
 		return "<Tuple>";
 
 	return "<?>";

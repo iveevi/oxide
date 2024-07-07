@@ -19,10 +19,10 @@ enum Operation {
 	pbegin, pend
 };
 
-enum Comparator {
-	eq, neq,
-	ge, geq,
-	le, leq
+struct Comparator {
+	Symbol s;
+
+	static std::vector <Comparator> list;
 };
 
 // A domain signature indicates the types of each *symbol*
